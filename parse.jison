@@ -72,7 +72,7 @@ WHITESPACE              \s+
 "IF"                    return "IF";
 "INLINE"                return "INLINE";
 "LABEL"                 return "LABEL";
-"NIL"                   return "NIL";
+/*"NIL"                   return "NIL"; */
 "OF"                    return "OF";
 "PACKED"                return "PACKED";
 "PROCEDURE"             return "PROCEDURE";
@@ -132,17 +132,17 @@ program         : PROGRAM id SEMI block DOT             {{ $$ = {node:'program',
                                                            inspect($$);
                                                            return $$; }}
                 ;
-block           : declarations BEGIN stmts END          {{ $$ = {node:'block',declarations:$1,stmts:$3}; }}
-                |              BEGIN stmts END          {{ $$ = {node:'block',declarations:[],stmts:$2}; }}
-                | declarations BEGIN       END          {{ $$ = {node:'block',declarations:$1,stmts:[]}; }}
-                |              BEGIN       END          {{ $$ = {node:'block',declarations:[],stmts:[]}; }}
+block           : decls BEGIN stmts END                 {{ $$ = {node:'block',decls:$1,stmts:$3}; }}
+                |       BEGIN stmts END                 {{ $$ = {node:'block',decls:[],stmts:$2}; }}
+                | decls BEGIN       END                 {{ $$ = {node:'block',decls:$1,stmts:[]}; }}
+                |       BEGIN       END                 {{ $$ = {node:'block',decls:[],stmts:[]}; }}
                 ;
 
-/* declaration is a plural (an array) already */
-declarations    : declarations declaration              {{ $$ = $1.concat($2); }}
-                |              declaration              {{ $$ = $1; }}
+/* decl is a plural (an array) already */
+decls           : decls decl                            {{ $$ = $1.concat($2); }}
+                |       decl                            {{ $$ = $1; }}
                 ;
-declaration     : VAR var_decls                         {{ $$ = $2; }}
+decl            : VAR var_decls                         {{ $$ = $2; }}
                 ;
 var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
                 |                var_decl               {{ $$ = $1; }}
@@ -165,7 +165,7 @@ exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); 
                 ;
 expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:'INTEGER',val:parseInt($1)}; }}
                 | lvalue                                {{ $$ = $1; }}
-                | expr PLUS expr                        {{ $$ = {node:'bin_op',op:'plus',left:$1,right:$2}; }}
+                | expr PLUS expr                        {{ $$ = {node:'expr_binop',op:'plus',left:$1,right:$3}; }}
                 ;
 
 call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
