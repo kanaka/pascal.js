@@ -1,0 +1,181 @@
+/* Turbo Pascal 1.0 parser */
+
+/* lexical grammar */
+%lex
+%options case-insensitive
+%s comment
+
+STRING                  \"[^"]*\"
+REAL                    [0-9]+"."[0-9]*     
+INTEGER                 [0-9]+
+ID                      [A-Za-z][A-Za-z0-9]*
+WHITESPACE              \s+
+
+%%
+
+"(*"                    this.begin('comment');
+<comment>[^*][^*]*      /* ignore comment contents up to "*" */
+<comment>"*"+[^)]       /* ignore '*" in comment that is not before ")" */
+<comment>"*)"           this.begin('INITIAL');
+
+"{".*"}"                /* skip whitespace */
+
+":="                    return "ASSIGN";  /* Needs to be before COLON and EQ */
+
+":"                     return "COLON";
+";"                     return "SEMI";
+","                     return "COMMA";
+"."                     return "DOT";
+"("                     return "LPAREN";
+")"                     return "RPAREN";
+"["                     return "LBRACKET";
+"]"                     return "RBRACKET";
+"{"                     return "LCURLY";
+"}"                     return "RCURLY";
+
+"<="                    return "LEQ";
+">="                    return "GEQ";
+"<>"                    return "NEQ";
+"+"                     return "PLUS";
+"-"                     return "MINUS";
+"*"                     return "STAR";
+"/"                     return "SLASH";
+"<"                     return "LT";
+">"                     return "GT";
+"="                     return "EQ";
+
+"AND"                   return "AND";
+"DIV"                   return "DIV";
+"IN"                    return "IN";
+"MOD"                   return "MOD";
+"NOT"                   return "NOT";
+"OR"                    return "OR";
+"SHL"                   return "SHL";
+"SHR"                   return "SHR";
+"XOR"                   return "XOR";
+
+/* Reserved words */
+"ABSOLUTE"              return "ABSOLUTE";
+"ARRAY"                 return "ARRAY";
+"BEGIN"                 return "BEGIN";
+"CASE"                  return "CASE";
+"CONST"                 return "CONST";
+"DO"                    return "DO";
+"DOWNTO"                return "DOWNTO";
+"ELSE"                  return "ELSE";
+"END"                   return "END";
+"EXTERNAL"              return "EXTERNAL";
+"FILE"                  return "FILE";
+"FOR"                   return "FOR";
+"FUNCTION"              return "FUNCTION";
+"GOTO"                  return "GOTO";
+"IF"                    return "IF";
+"INLINE"                return "INLINE";
+"LABEL"                 return "LABEL";
+"NIL"                   return "NIL";
+"OF"                    return "OF";
+"PACKED"                return "PACKED";
+"PROCEDURE"             return "PROCEDURE";
+"PROGRAM"               return "PROGRAM";
+"RECORD"                return "RECORD";
+"REPEAT"                return "REPEAT";
+"SET"                   return "SET";
+"THEN"                  return "THEN";
+"TO"                    return "TO";
+"TYPE"                  return "TYPE";
+"UNTIL"                 return "UNTIL";
+"VAR"                   return "VAR";
+"WHILE"                 return "WHILE";
+"WITH"                  return "WITH";
+
+
+{STRING}                return "STRING_LITERAL";
+{REAL}                  return "REAL_LITERAL";
+{INTEGER}               return "INTEGER_LITERAL";
+
+{ID}                    return "ID";
+
+{WHITESPACE}            /* skip whitespace */
+
+<<EOF>>                 return 'EOF'
+.                       return 'INVALID'
+
+/lex
+
+%{
+    var util = require("util");
+    function inspect(obj) {
+        console.warn(util.inspect(obj,false,20));
+    }
+
+    function appendChild(node, child){
+      node.splice(node.length,0,child);
+      return node;
+    }
+%}
+
+
+/* operator associations and precedence */
+
+%left           "ELSE"
+%nonassoc       "EQ" "NEQ" "GT" "LT" "GEQ" "LEQ" "IN"
+%left           "PLUS" "MINUS" "OR" "XOR"
+%left           "TIMES" "SLASH" "MOD" "DIV" "AND" "SHL" "SHR"
+%nonassoc       "NOT"
+%left           "UMINUS"          
+
+%start program
+
+%% /* language grammar */
+
+program         : PROGRAM id SEMI block DOT             {{ $$ = {node:'program',id:$2,block:$4};
+                                                           inspect($$);
+                                                           return $$; }}
+                ;
+block           : declarations BEGIN stmts END          {{ $$ = {node:'block',declarations:$1,stmts:$3}; }}
+                |              BEGIN stmts END          {{ $$ = {node:'block',declarations:[],stmts:$2}; }}
+                | declarations BEGIN       END          {{ $$ = {node:'block',declarations:$1,stmts:[]}; }}
+                |              BEGIN       END          {{ $$ = {node:'block',declarations:[],stmts:[]}; }}
+                ;
+
+/* declaration is a plural (an array) already */
+declarations    : declarations declaration              {{ $$ = $1.concat($2); }}
+                |              declaration              {{ $$ = $1; }}
+                ;
+declaration     : VAR var_decls                         {{ $$ = $2; }}
+                ;
+var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
+                |                var_decl               {{ $$ = $1; }}
+                ;
+var_decl        : ids COLON id SEMI                     {{ $$ = [];
+                                                           for(var i=0; i < $1.length; i++) {
+                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
+                ;
+
+stmts           : stmts SEMI stmt                       {{ $$ = $1.concat($3); }}
+                |            stmt                       {{ $$ = [$1]; }}
+                ;
+stmt            : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assign',lvalue:$1,expr:$3}; }}
+                | id call_params                        {{ $$ = {node:'stmt_call',id:$1,call_params:$2}; }}
+//                | id                                    {{ $$ = {node:'stmt_call',id:$1,call_params:[]}; }}
+                ;
+
+exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); }}
+                |             expr                      {{ $$ = [$1]; }}
+                ;
+expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:'INTEGER',val:parseInt($1)}; }}
+                | lvalue                                {{ $$ = $1; }}
+                | expr PLUS expr                        {{ $$ = {node:'bin_op',op:'plus',left:$1,right:$2}; }}
+                ;
+
+call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
+                | LPAREN RPAREN                         {{ $$ = []; }}
+                ;
+
+lvalue          : id                                    {{ $$ = {node:'variable',id:$1}; }}
+                ;
+ids             : ids COMMA id                          {{ $$ = $1.concat([$3]); }}
+                | id                                    {{ $$ = [$1]; }}
+                ;
+id              : ID                                    {{ $$ = yytext; }}
+                ;
