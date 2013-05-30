@@ -5,7 +5,7 @@
 %options case-insensitive
 %s comment
 
-STRING                  \"[^"]*\"
+STRING                  \"[^"]*\"|\'[^']*\'
 REAL                    [0-9]+"."[0-9]*     
 INTEGER                 [0-9]+
 ID                      [A-Za-z][A-Za-z0-9]*
@@ -120,7 +120,7 @@ WHITESPACE              \s+
 %left           "ELSE"
 %nonassoc       "EQ" "NEQ" "GT" "LT" "GEQ" "LEQ" "IN"
 %left           "PLUS" "MINUS" "OR" "XOR"
-%left           "TIMES" "SLASH" "MOD" "DIV" "AND" "SHL" "SHR"
+%left           "STAR" "SLASH" "MOD" "DIV" "AND" "SHL" "SHR"
 %nonassoc       "NOT"
 %left           "UMINUS"          
 
@@ -164,8 +164,15 @@ exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); 
                 |             expr                      {{ $$ = [$1]; }}
                 ;
 expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:'INTEGER',val:parseInt($1)}; }}
+                | REAL_LITERAL                          {{ $$ = {node:'real',type:'REAL',val:parseFloat($1)}; }}
+                | STRING_LITERAL                        {{ $$ = {node:'string',type:'STRING',val:$1.substr(1,$1.length-2)}; }}
                 | lvalue                                {{ $$ = $1; }}
                 | expr PLUS expr                        {{ $$ = {node:'expr_binop',op:'plus',left:$1,right:$3}; }}
+                | expr MINUS expr                       {{ $$ = {node:'expr_binop',op:'minus',left:$1,right:$3}; }}
+                | expr STAR expr                        {{ $$ = {node:'expr_binop',op:'star',left:$1,right:$3}; }}
+                | expr SLASH expr                       {{ $$ = {node:'expr_binop',op:'slash',left:$1,right:$3}; }}
+                | expr DIV expr                         {{ $$ = {node:'expr_binop',op:'div',left:$1,right:$3}; }}
+                | expr MOD expr                         {{ $$ = {node:'expr_binop',op:'mod',left:$1,right:$3}; }}
                 ;
 
 call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}

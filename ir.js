@@ -216,7 +216,7 @@ function IR(theAST) {
         switch (ast.op) {
           case 'plus':  op = 'add'; break;
           case 'minus': op = 'sub'; break;
-          case 'times': op = 'mul'; break;
+          case 'star':  op = 'mul'; break;
           case 'slash': op = 'udiv'; break;
           case 'div':   op = 'sdiv'; break;
           case 'mod':   op = 'urem'; break;
@@ -231,6 +231,16 @@ function IR(theAST) {
       case 'integer':
         ast.itype = "i32";
         ast.ilocal = ast.val;
+        break;
+      case 'string':
+        var sval = ast.val,
+            slen = sval.length+1,
+            sname = '@.string' + (str_cnt++),
+            lname;
+        ir.push([sname + ' = private constant [' + slen + ' x i8] c"' + sval + '\\00"']);
+        ast.itype = '[' + slen + ' x i8]*';
+        ast.ilocal = sname;
+        ast.iref = sname;
         break;
 
       case 'variable':
