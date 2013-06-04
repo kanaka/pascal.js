@@ -88,6 +88,7 @@ function IR(theAST) {
     switch (type) {
       case 'INTEGER': return "i32"; break;
       case 'REAL':    return "float"; break;
+      case 'BOOLEAN': return "i1"; break;
       default: throw new Error("TODO: handle " + type + " return value");
     }
   }
@@ -128,6 +129,8 @@ function IR(theAST) {
         ir.push("declare i32 @printf(i8*, ...)");
         ir.push("");
         ir.push('@.newline = private constant [2 x i8] c"\\0A\\00"');
+        ir.push('@.true_str = private constant [5 x i8] c"TRUE\\00"');
+        ir.push('@.false_str = private constant [6 x i8] c"FALSE\\00"');
         ir.push('@.str_format = private constant [3 x i8] c"%s\\00"');
         ir.push('@.int_format = private constant [3 x i8] c"%d\\00"');
         ir.push('@.float_format = private constant [3 x i8] c"%f\\00"');
@@ -224,6 +227,7 @@ function IR(theAST) {
         switch (id) {
           case 'WRITE':
           case 'WRITELN':
+            ir.push('  ; WRITELN begin');
             for(var i=0; i < cparams.length; i++) {
               var param = cparams[i],
                   v = vcnt++,
@@ -233,6 +237,27 @@ function IR(theAST) {
                 case 'STRING':  format = "@.str_format"; break;
                 case 'INTEGER': format = "@.int_format"; break;
                 case 'REAL':    format = "@.float_format"; break;
+                case 'BOOLEAN':
+                  var br_name = new_name('br'),
+                      br_true = br_name + '_true',
+                      br_false = br_name + '_false',
+                      br_done = br_name + '_done',
+                      bool_local1 = '%' + new_name('bool_local'),
+                      bool_local2 = '%' + new_name('bool_local'),
+                      bool_local_out = '%' + new_name('bool_local');
+                  ir.push('  br ' + param.itype + ' ' + param.ilocal + ', label %' + br_true + ', label %' + br_false);
+                  ir.push('  ' + br_true + ':');
+                  ir.push('    ' + bool_local1 + ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0'); 
+                  ir.push('    br label %' + br_done); 
+                  ir.push('  ' + br_false + ':');
+                  ir.push('    ' + bool_local2 + ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0'); 
+                  ir.push('    br label %' + br_done); 
+                  ir.push('  ' + br_done + ':');
+                  ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 + ', %' + br_true + '], [ ' + bool_local2 + ', %' + br_false + ']');
+                  format = "@.str_format";
+                  param.itype = 'i8*';
+                  param.ilocal = bool_local_out;
+                  break;
                 default:
                   throw new Error("Unknown WRITE type: " + param.type);
               }
@@ -246,6 +271,7 @@ function IR(theAST) {
               ir.push('  %str' + v + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
               ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ')');
             }
+            ir.push('  ; WRITELN end');
             break;
           default:
             var pdecl = st.lookup(id);
@@ -273,10 +299,13 @@ function IR(theAST) {
         var left = ast.left,
             right = ast.right,
             dest_name = '%' + new_name("binop"),
-            op;
+            lltype, rtype, ritype, op;
         ir.push.apply(ir, toIR(left,level,fname));
         ir.push.apply(ir, toIR(right,level,fname));
         // TODO: real typechecking comparison
+        lltype = type_to_lltype(left.type);
+        rtype = left.type;
+        ritype = lltype;
         switch (ast.op) {
           case 'plus':  op = 'add'; break;
           case 'minus': op = 'sub'; break;
@@ -284,11 +313,39 @@ function IR(theAST) {
           case 'slash': op = 'udiv'; break;
           case 'div':   op = 'sdiv'; break;
           case 'mod':   op = 'urem'; break;
-          default: throw new Error("TODO BinOpExp operand " + ast.op);
+
+          case 'and':   op = 'and'; break;
+          case 'or':    op = 'or'; break;
+
+          case 'gt':    op = 'icmp ugt'; ritype = 'i1'; break;
+          case 'lt':    op = 'icmp ult'; ritype = 'i1'; break;
+          case 'eq':    op = 'icmp eq'; ritype = 'i1'; break;
+          case 'geq':   op = 'icmp uge'; ritype = 'i1'; break;
+          case 'leq':   op = 'icmp ule'; ritype = 'i1'; break;
+          case 'neq':   op = 'icmp ne'; ritype = 'i1'; break;
+
+          default: throw new Error("TODO expr_binop operand " + ast.op);
         }
-        ir.push('  ' + dest_name + ' = ' + op + ' i32 ' + left.ilocal + ', ' + right.ilocal);
-        ast.type = left.type;
-        ast.itype = left.itype;
+        ir.push('  ' + dest_name + ' = ' + op + ' ' + lltype + ' ' + left.ilocal + ', ' + right.ilocal);
+        ast.type = rtype;
+        ast.itype = ritype;
+        ast.ilocal = dest_name;
+        break;
+
+      case 'expr_unop':
+        var expr = ast.expr,
+            dest_name = '%' + new_name("unop"),
+            op;
+        ir.push.apply(ir, toIR(expr,level,fname));
+        // TODO: real typechecking comparison
+        switch (ast.op) {
+          case 'minus':
+            ir.push('  ' + dest_name + ' = sub i32 0, ' + expr.ilocal);
+            break;
+          default: throw new Error("TODO expr_unop operand " + ast.op);
+        }
+        ast.type = expr.type;
+        ast.itype = expr.itype;
         ast.ilocal = dest_name;
         break;
 
@@ -309,8 +366,8 @@ function IR(theAST) {
 
       case 'variable':
         switch (ast.id) {
-          //case 'TRUE': ast.rettype = "i32"; ast.retref = "1"; break;
-          //case 'FALSE': ast.rettype = "i32"; ast.retref = "0"; break;
+          case 'TRUE': ast.itype = "i1"; ast.ilocal = "true"; break;
+          case 'FALSE': ast.itype = "i1"; ast.ilocal = "false"; break;
           //case 'NIL': ast.rettype = "i32*"; ast.retref = "null"; break;
           default:
             var vdecl = st.lookup(ast.id),

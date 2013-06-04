@@ -5,7 +5,7 @@
 %options case-insensitive
 %s comment
 
-STRING                  \"[^"]*\"|\'[^']*\'
+STRING                  "'"[^']*"'"
 REAL                    [0-9]+"."[0-9]*     
 INTEGER                 [0-9]+
 ID                      [A-Za-z][A-Za-z0-9]*
@@ -192,12 +192,22 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                 | REAL_LITERAL                          {{ $$ = {node:'real',type:'REAL',val:parseFloat($1)}; }}
                 | STRING_LITERAL                        {{ $$ = {node:'string',type:'STRING',val:$1.substr(1,$1.length-2)}; }}
                 | lvalue                                {{ $$ = $1; }}
+                | LPAREN expr RPAREN                    {{ $$ = $2; }}
+                | MINUS expr                            {{ $$ = {node:'expr_unop',op:'minus',expr:$2}; }}
                 | expr PLUS expr                        {{ $$ = {node:'expr_binop',op:'plus',left:$1,right:$3}; }}
                 | expr MINUS expr                       {{ $$ = {node:'expr_binop',op:'minus',left:$1,right:$3}; }}
                 | expr STAR expr                        {{ $$ = {node:'expr_binop',op:'star',left:$1,right:$3}; }}
                 | expr SLASH expr                       {{ $$ = {node:'expr_binop',op:'slash',left:$1,right:$3}; }}
                 | expr DIV expr                         {{ $$ = {node:'expr_binop',op:'div',left:$1,right:$3}; }}
                 | expr MOD expr                         {{ $$ = {node:'expr_binop',op:'mod',left:$1,right:$3}; }}
+                | expr OR expr                          {{ $$ = {node:'expr_binop',op:'or',left:$1,right:$3}; }}
+                | expr AND expr                         {{ $$ = {node:'expr_binop',op:'and',left:$1,right:$3}; }}
+                | expr GT expr                          {{ $$ = {node:'expr_binop',op:'gt',left:$1,right:$3}; }}
+                | expr LT expr                          {{ $$ = {node:'expr_binop',op:'lt',left:$1,right:$3}; }}
+                | expr EQ expr                          {{ $$ = {node:'expr_binop',op:'eq',left:$1,right:$3}; }}
+                | expr GEQ expr                         {{ $$ = {node:'expr_binop',op:'geq',left:$1,right:$3}; }}
+                | expr LEQ expr                         {{ $$ = {node:'expr_binop',op:'leq',left:$1,right:$3}; }}
+                | expr NEQ expr                         {{ $$ = {node:'expr_binop',op:'neq',left:$1,right:$3}; }}
                 ;
 
 call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
