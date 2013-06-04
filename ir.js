@@ -31,7 +31,8 @@ function SymbolTable() {
   }
 
   function lookup(name) {
-    var idx = indexOf(name);
+    var name = name.toUpperCase(),
+        idx = indexOf(name);
     if (typeof(idx) !== "undefined") {
       return data[idx][name];
     }
@@ -39,11 +40,12 @@ function SymbolTable() {
   }
 
   function insert(name, value) {
-    data[data.length-1][name] = value;
+    data[data.length-1][name.toUpperCase()] = value;
   }
 
   function replace(name, value) {
-    var idx = indexOf(name);
+    var name = name.toUppertCase(),
+        idx = indexOf(name);
     if (typeof(idx) !== "undefined") {
       data[idx][name] = value;
     } else {
@@ -110,7 +112,7 @@ function IR(theAST) {
         node = ast.node,
         ir = [];
     level = level ? level : 0;
-    fname = fname ? fname : ast.id;
+    fname = fname ? fname : ast.id.toUpperCase();
     for (var i=0; i < level; i++) {
       indent = indent + "  ";
     }
@@ -121,7 +123,7 @@ function IR(theAST) {
       case 'program':
         var name = ast.id,
             block = ast.block;
-        st.insert(name, {name: name, level: level});
+        st.insert('main', {name: name, level: level});
 
         ir.push("declare i32 @printf(i8*, ...)");
         ir.push("");
@@ -130,22 +132,36 @@ function IR(theAST) {
         ir.push('@.int_format = private constant [3 x i8] c"%d\\00"');
         ir.push('@.float_format = private constant [3 x i8] c"%f\\00"');
         ir.push('');
-        ir.push('define i32 @main() {');
-        ir.push('entry:');
-        ir.push.apply(ir, toIR(block,level,fname));
-        ir.push('  ret i32 0');
-        ir.push('}');
+        block.param_list = [];
+        ir.push.apply(ir, toIR(block,level,'main'));
         break;
 
       case 'block':
         var decls = ast.decls,
-            stmts = ast.stmts;
+            stmts = ast.stmts,
+            param_list = ast.param_list;
+        // Do sub-program declarations before the body definition
         for (var i=0; i < decls.length; i++) {
-          ir.push.apply(ir, toIR(decls[i],level,fname));
+          var decl = decls[i];
+          if (decl.node === 'proc_decl' || decl.node === 'func_decl') {
+            ir.push.apply(ir, toIR(decl,level,fname));
+          }
+        }
+        ir.push('');
+        ir.push('define i32 @' + fname + '(' + param_list.join(", ") +') {');
+        ir.push('entry:');
+        // Do variable declarations inside the body definition
+        for (var i=0; i < decls.length; i++) {
+          var decl = decls[i];
+          if (decl.node !== 'proc_decl' && decl.node !== 'func_decl') {
+            ir.push.apply(ir, toIR(decl,level,fname));
+          }
         }
         for (var i=0; i < stmts.length; i++) {
           ir.push.apply(ir, toIR(stmts[i],level,fname));
         }
+        ir.push('  ret i32 0');
+        ir.push('}');
         break;
 
       case 'var_decl':
@@ -157,6 +173,37 @@ function IR(theAST) {
         lltype = type_to_lltype(type),
         st.insert(id,{node:'var_decl',type:type,sname:sname,level:pdecl.level});
         ir.push('  ' + sname + ' = alloca ' + lltype);
+        break;
+
+      case 'proc_decl':
+        var id = ast.id,
+            fparams = ast.fparams,
+            block = ast.block,
+            new_fname = new_name(id),
+            new_level = level+1,
+            param_list = [];
+
+        st.insert(id, {name: new_fname, level: new_level,fparams:fparams});
+
+        st.begin_scope();
+
+        for (var i=0; i < fparams.length; i++) {
+          var fparam = fparams[i],
+              pname = "%" + new_name(fparam.id + "_fparam"),
+              lltype = type_to_lltype(fparam.type);
+          st.insert(fparam.id,{node:'var_decl',type:fparam.type,pname:pname,var:fparam.var,level:new_level});
+          if (fparam.var) {
+            param_list.push(lltype + '* ' + pname);
+          } else {
+            param_list.push(lltype + ' ' + pname);
+          }
+        }
+
+        ir.push('');
+        block.param_list = param_list;
+        ir.push.apply(ir, toIR(block,level,new_fname));
+
+        st.end_scope();
         break;
 
       case 'stmt_assign':
@@ -172,13 +219,13 @@ function IR(theAST) {
         break;
 
       case 'stmt_call':
-        var id = ast.id.toUpperCase();
+        var id = ast.id.toUpperCase(),
+            cparams = (ast.call_params || []);
         switch (id) {
           case 'WRITE':
           case 'WRITELN':
-            var params = (ast.call_params || []);
-            for(var i=0; i < params.length; i++) {
-              var param = params[i],
+            for(var i=0; i < cparams.length; i++) {
+              var param = cparams[i],
                   v = vcnt++,
                   format = null;
               ir.push.apply(ir, toIR(param,level,fname));
@@ -201,7 +248,24 @@ function IR(theAST) {
             }
             break;
           default:
-            throw new Error("Unknown function '" + ast.id + "'");
+            var pdecl = st.lookup(id);
+            if (!pdecl) {
+              throw new Error("Unknown function '" + id + "'");
+            }
+            var fparams = pdecl.fparams,
+                param_list = [];
+            for(var i=0; i < cparams.length; i++) {
+              var cparam = cparams[i];
+              // TODO: make sure call params and formal params match
+              // length and types
+              ir.push.apply(ir, toIR(cparam,level,fname));
+              if (fparams[i].var) {
+                param_list.push(cparam.itype + "* " + cparam.istack);
+              } else {
+                param_list.push(cparam.itype + " " + cparam.ilocal);
+              }
+            }
+            ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
         }
         break;
 
@@ -250,13 +314,28 @@ function IR(theAST) {
           //case 'NIL': ast.rettype = "i32*"; ast.retref = "null"; break;
           default:
             var vdecl = st.lookup(ast.id),
-                lname = "%" + new_name(ast.id + "_local"),
                 lltype = type_to_lltype(vdecl.type) ;
-            ir.push('  ' + lname + ' = load ' + lltype + '* ' + vdecl.sname);
             ast.type = vdecl.type;
             ast.itype = lltype;
-            ast.ilocal = lname;
-            ast.istack = vdecl.sname;
+            if (vdecl.pname) {
+              // parameter register/variable
+              if (vdecl.var) {
+                ast.ilocal = vdecl.pname;
+                ast.istack = vdecl.pname;
+              } else {
+                var sname = "%" + new_name(ast.id + "_stack");
+                ast.ilocal = vdecl.pname;
+                ast.istack = sname;
+                ir.push('  ' + sname + ' = alloca ' + lltype);
+                ir.push('  store ' + lltype + ' ' + vdecl.pname + ', ' + lltype + '* ' + sname);
+              }
+            } else {
+              // stack variable
+              var lname = "%" + new_name(ast.id + "_local");
+              ast.ilocal = lname;
+              ast.istack = vdecl.sname;
+              ir.push('  ' + lname + ' = load ' + lltype + '* ' + vdecl.sname);
+            }
         }
         break;
 

@@ -143,13 +143,38 @@ decls           : decls decl                            {{ $$ = $1.concat($2); }
                 |       decl                            {{ $$ = $1; }}
                 ;
 decl            : VAR var_decls                         {{ $$ = $2; }}
+                | PROCEDURE proc_decl                   {{ $$ = [$2]; }}
+                | FUNCTION func_decl                    {{ $$ = [$2]; }}
                 ;
 var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
                 |                var_decl               {{ $$ = $1; }}
                 ;
 var_decl        : ids COLON id SEMI                     {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
-                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
+                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3.toUpperCase()}]); } }}
+                ;
+
+proc_decl       : id formal_params SEMI block SEMI      {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
+                | id               SEMI block SEMI      {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$4}; }}
+                |
+                ;
+func_decl       : id formal_params COLON id SEMI block SEMI {{ $$ = {node:'func_decl',id:$2,fparams:$2,type:$4.toUpperCase(),block:$6}; }}
+                | id               COLON id SEMI block SEMI {{ $$ = {node:'func_decl',id:$2,fparams:[],type:$4.toUpperCase(),block:$6}; }}
+                |
+                ;
+formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}
+                | LPAREN             RPAREN             {{ $$ = []; }}
+                ;
+fp_sections     : fp_sections SEMI fp_section           {{ $$ = $1.concat($3); }}
+                |                  fp_section           {{ $$ = $1; }}
+                ;
+/* fp_section is plural (array) */
+fp_section      : ids COLON id                          {{ $$ = [];
+                                                           for(var i=0; i < $1.length; i++) {
+                                                             $$ = $$.concat([{node:'param',id:$1[i],type:$3.toUpperCase(),var:false}]); } }}
+                | VAR ids COLON id                      {{ $$ = [];
+                                                           for(var i=0; i < $2.length; i++) {
+                                                             $$ = $$.concat([{node:'param',id:$2[i],type:$4.toUpperCase(),var:true}]); } }}
                 ;
 
 stmts           : stmts SEMI stmt                       {{ $$ = $1.concat($3); }}
