@@ -128,38 +128,39 @@ WHITESPACE              \s+
 
 %% /* language grammar */
 
-program         : PROGRAM id SEMI block DOT             {{ $$ = {node:'program',id:$2,block:$4};
+program         : program_header SEMI block DOT         {{ $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$3};
                                                            inspect($$);
                                                            return $$; }}
                 ;
-block           : decls BEGIN stmts END                 {{ $$ = {node:'block',decls:$1,stmts:$3}; }}
-                |       BEGIN stmts END                 {{ $$ = {node:'block',decls:[],stmts:$2}; }}
-                | decls BEGIN       END                 {{ $$ = {node:'block',decls:$1,stmts:[]}; }}
-                |       BEGIN       END                 {{ $$ = {node:'block',decls:[],stmts:[]}; }}
+program_header  : PROGRAM id                            {{ $$ = {node:'program_heading',id:$2,fparams:[]}; }}
+                | PROGRAM id LPAREN ids RPAREN          {{ $$ = {node:'program_heading',id:$2,fparams:$4}; }}
+                ;
+block           : decls cstmt                           {{ $$ = {node:'block',decls:$1,stmts:$2}; }}
+                |       cstmt                           {{ $$ = {node:'block',decls:[],stmts:$1}; }}
                 ;
 
 /* decl is a plural (an array) already */
 decls           : decls decl                            {{ $$ = $1.concat($2); }}
                 |       decl                            {{ $$ = $1; }}
                 ;
-decl            : VAR var_decls                         {{ $$ = $2; }}
-                | PROCEDURE proc_decl                   {{ $$ = [$2]; }}
-                | FUNCTION func_decl                    {{ $$ = [$2]; }}
+decl            : VAR var_decls SEMI                    {{ $$ = $2; }}
+                | PROCEDURE proc_decl SEMI              {{ $$ = [$2]; }}
+                | FUNCTION func_decl SEMI               {{ $$ = [$2]; }}
                 ;
 var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
                 |                var_decl               {{ $$ = $1; }}
                 ;
-var_decl        : ids COLON id SEMI                     {{ $$ = [];
+var_decl        : ids COLON id                          {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
                                                              $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3.toUpperCase()}]); } }}
                 ;
 
-proc_decl       : id formal_params SEMI block SEMI      {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
-                | id               SEMI block SEMI      {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$4}; }}
+proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
+                | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$4}; }}
                 |
                 ;
-func_decl       : id formal_params COLON id SEMI block SEMI {{ $$ = {node:'func_decl',id:$2,fparams:$2,type:$4.toUpperCase(),block:$6}; }}
-                | id               COLON id SEMI block SEMI {{ $$ = {node:'func_decl',id:$2,fparams:[],type:$4.toUpperCase(),block:$6}; }}
+func_decl       : id formal_params COLON id SEMI block  {{ $$ = {node:'func_decl',id:$2,fparams:$2,type:$4.toUpperCase(),block:$6}; }}
+                | id               COLON id SEMI block  {{ $$ = {node:'func_decl',id:$2,fparams:[],type:$4.toUpperCase(),block:$6}; }}
                 |
                 ;
 formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}
@@ -177,12 +178,26 @@ fp_section      : ids COLON id                          {{ $$ = [];
                                                              $$ = $$.concat([{node:'param',id:$2[i],type:$4.toUpperCase(),var:true}]); } }}
                 ;
 
+cstmt           : BEGIN stmts END                       {{ $$ = $2; }}
+                ;
 stmts           : stmts SEMI stmt                       {{ $$ = $1.concat($3); }}
                 |            stmt                       {{ $$ = [$1]; }}
                 ;
-stmt            : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assign',lvalue:$1,expr:$3}; }}
+stmt            : open_stmt                             {{ $$ = $1; }}
+                | closed_stmt                           {{ $$ = $1; }}
+                ;
+closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assign',lvalue:$1,expr:$3}; }}
                 | id call_params                        {{ $$ = {node:'stmt_call',id:$1,call_params:$2}; }}
-//                | id                                    {{ $$ = {node:'stmt_call',id:$1,call_params:[]}; }}
+                | lvalue                                {{ $$ = {node:'stmt_call',id:$1.id,call_params:[]}; }}
+                | cstmt                                 {{ $$ = {node:'stmt_compound',stmts:$1}; }}
+                | closed_if_stmt                        {{ $$ = $1; }}
+                ;
+open_stmt       : open_if_stmt                          {{ $$ = $1; }}
+                ;
+closed_if_stmt  : IF expr THEN closed_stmt ELSE closed_stmt {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:$6}; }}
+                ;
+open_if_stmt    : IF expr THEN stmt                         {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:null}; }}
+                | IF expr THEN closed_stmt ELSE open_stmt   {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:$6}; }}
                 ;
 
 exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); }}

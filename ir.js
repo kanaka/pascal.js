@@ -227,7 +227,7 @@ function IR(theAST) {
         switch (id) {
           case 'WRITE':
           case 'WRITELN':
-            ir.push('  ; WRITELN begin');
+            ir.push('  ; WRITELN start');
             for(var i=0; i < cparams.length; i++) {
               var param = cparams[i],
                   v = vcnt++,
@@ -248,10 +248,10 @@ function IR(theAST) {
                   ir.push('  br ' + param.itype + ' ' + param.ilocal + ', label %' + br_true + ', label %' + br_false);
                   ir.push('  ' + br_true + ':');
                   ir.push('    ' + bool_local1 + ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0'); 
-                  ir.push('    br label %' + br_done); 
+                  ir.push('  br label %' + br_done); 
                   ir.push('  ' + br_false + ':');
                   ir.push('    ' + bool_local2 + ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0'); 
-                  ir.push('    br label %' + br_done); 
+                  ir.push('  br label %' + br_done); 
                   ir.push('  ' + br_done + ':');
                   ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 + ', %' + br_true + '], [ ' + bool_local2 + ', %' + br_false + ']');
                   format = "@.str_format";
@@ -271,7 +271,7 @@ function IR(theAST) {
               ir.push('  %str' + v + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
               ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ')');
             }
-            ir.push('  ; WRITELN end');
+            ir.push('  ; WRITELN finish');
             break;
           default:
             var pdecl = st.lookup(id);
@@ -293,6 +293,33 @@ function IR(theAST) {
             }
             ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
         }
+        break;
+
+      case 'stmt_compound':
+        for (var i=0; i < ast.stmts.length; i++) {
+          ir.push.apply(ir,toIR(ast.stmts[i],level,fname));
+        }
+        break;
+
+      case 'stmt_if':
+        var expr = ast.expr,
+            tstmt = ast.tstmt,
+            fstmt = ast.fstmt;
+        ir.push('  ; if statement start');
+        ir.push.apply(ir, toIR(expr,level,fname));
+        var br_name = new_name('br'),
+            br_true = br_name + '_true',
+            br_false = br_name + '_false',
+            br_done = br_name + '_done';
+        ir.push('  br ' + expr.itype + ' ' + expr.ilocal + ', label %' + br_true + ', label %' + br_false);
+        ir.push('  ' + br_true + ':');
+        ir.push.apply(ir, toIR(tstmt,level,fname));
+        ir.push('    br label %' + br_done); 
+        ir.push('  ' + br_false + ':');
+        ir.push.apply(ir, toIR(fstmt,level,fname));
+        ir.push('    br label %' + br_done); 
+        ir.push('  ' + br_done + ':');
+        ir.push('  ; if statement finish');
         break;
 
       case 'expr_binop':
@@ -324,7 +351,7 @@ function IR(theAST) {
           case 'leq':   op = 'icmp ule'; ritype = 'i1'; break;
           case 'neq':   op = 'icmp ne'; ritype = 'i1'; break;
 
-          default: throw new Error("TODO expr_binop operand " + ast.op);
+          default: throw new Error("Unexpected expr_binop operand " + ast.op);
         }
         ir.push('  ' + dest_name + ' = ' + op + ' ' + lltype + ' ' + left.ilocal + ', ' + right.ilocal);
         ast.type = rtype;
@@ -342,7 +369,7 @@ function IR(theAST) {
           case 'minus':
             ir.push('  ' + dest_name + ' = sub i32 0, ' + expr.ilocal);
             break;
-          default: throw new Error("TODO expr_unop operand " + ast.op);
+          default: throw new Error("Unexpected expr_unop operand " + ast.op);
         }
         ast.type = expr.type;
         ast.itype = expr.itype;
@@ -365,7 +392,7 @@ function IR(theAST) {
         break;
 
       case 'variable':
-        switch (ast.id) {
+        switch (ast.id.toUpperCase()) {
           case 'TRUE': ast.itype = "i1"; ast.ilocal = "true"; break;
           case 'FALSE': ast.itype = "i1"; ast.ilocal = "false"; break;
           //case 'NIL': ast.rettype = "i32*"; ast.retref = "null"; break;
