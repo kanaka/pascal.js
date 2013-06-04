@@ -337,18 +337,18 @@ function IR(theAST) {
           case 'plus':  op = 'add'; break;
           case 'minus': op = 'sub'; break;
           case 'star':  op = 'mul'; break;
-          case 'slash': op = 'udiv'; break;
+          case 'slash': op = 'sdiv'; break;  // float
           case 'div':   op = 'sdiv'; break;
           case 'mod':   op = 'urem'; break;
 
           case 'and':   op = 'and'; break;
           case 'or':    op = 'or'; break;
 
-          case 'gt':    op = 'icmp ugt'; ritype = 'i1'; break;
-          case 'lt':    op = 'icmp ult'; ritype = 'i1'; break;
+          case 'gt':    op = 'icmp sgt'; ritype = 'i1'; break;
+          case 'lt':    op = 'icmp slt'; ritype = 'i1'; break;
           case 'eq':    op = 'icmp eq'; ritype = 'i1'; break;
-          case 'geq':   op = 'icmp uge'; ritype = 'i1'; break;
-          case 'leq':   op = 'icmp ule'; ritype = 'i1'; break;
+          case 'geq':   op = 'icmp sge'; ritype = 'i1'; break;
+          case 'leq':   op = 'icmp sle'; ritype = 'i1'; break;
           case 'neq':   op = 'icmp ne'; ritype = 'i1'; break;
 
           default: throw new Error("Unexpected expr_binop operand " + ast.op);
