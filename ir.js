@@ -224,6 +224,14 @@ function IR(theAST) {
       case 'stmt_call':
         var id = ast.id.toUpperCase(),
             cparams = (ast.call_params || []);
+        // evaluate the parameters
+        for(var i=0; i < cparams.length; i++) {
+          var cparam = cparams[i];
+          // TODO: make sure call params and formal params match
+          // length and types
+          ir.push.apply(ir, toIR(cparam,level,fname));
+        }
+        // TODO: perhaps move to a separate library.js
         switch (id) {
           case 'WRITE':
           case 'WRITELN':
@@ -232,7 +240,6 @@ function IR(theAST) {
               var param = cparams[i],
                   v = vcnt++,
                   format = null;
-              ir.push.apply(ir, toIR(param,level,fname));
               switch (param.type) {
                 case 'STRING':  format = "@.str_format"; break;
                 case 'INTEGER': format = "@.int_format"; break;
@@ -282,9 +289,6 @@ function IR(theAST) {
                 param_list = [];
             for(var i=0; i < cparams.length; i++) {
               var cparam = cparams[i];
-              // TODO: make sure call params and formal params match
-              // length and types
-              ir.push.apply(ir, toIR(cparam,level,fname));
               if (fparams[i].var) {
                 param_list.push(cparam.itype + "* " + cparam.istack);
               } else {
