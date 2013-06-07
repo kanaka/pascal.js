@@ -117,7 +117,7 @@ WHITESPACE              \s+
 
 /* operator associations and precedence */
 
-%left           "ELSE"
+%right          "THEN" "ELSE"
 %nonassoc       "EQ" "NEQ" "GT" "LT" "GEQ" "LEQ" "IN"
 %left           "PLUS" "MINUS" "OR" "XOR"
 %left           "STAR" "SLASH" "MOD" "DIV" "AND" "SHL" "SHR"
