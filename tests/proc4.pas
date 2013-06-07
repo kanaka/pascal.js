@@ -2,7 +2,7 @@ program Sample;
   procedure Change(A : Integer; var B : Integer);
   begin
     A := 13;
-    B := 14
+    B := B + 1 
   end;
   var A,B : Integer;
 begin

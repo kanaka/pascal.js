@@ -39,12 +39,13 @@ function SymbolTable() {
     return undefined;
   }
 
-  function insert(name, value) {
-    data[data.length-1][name.toUpperCase()] = value;
+  function insert(name, value, level) {
+    if (typeof level === 'undefined') { level = data.length-1; }
+    data[level][name.toUpperCase()] = value;
   }
 
   function replace(name, value) {
-    var name = name.toUppertCase(),
+    var name = name.toUpperCase(),
         idx = indexOf(name);
     if (typeof(idx) !== "undefined") {
       data[idx][name] = value;
@@ -127,7 +128,7 @@ function IR(theAST) {
         var name = ast.id,  // TODO: do anything with program name?
             fparams = ast.fparams,
             block = ast.block;
-        st.insert('main',{name:'main',level:level,fparams:fparams});
+        st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
 
         ir.push("declare i32 @printf(i8*, ...)");
         ir.push("");
@@ -146,12 +147,15 @@ function IR(theAST) {
         var decls = ast.decls,
             stmts = ast.stmts,
             pdecl = st.lookup(fname),
+            lparams = pdecl.lparams,
             fparams = pdecl.fparams,
             param_list = [],
+            lparam_list = [],
             pdecl_ir = [],
             vdecl_ir = [],
             stmts_ir = [];
 
+        // Regular formal parameters
         for (var i=0; i < fparams.length; i++) {
           var fparam = fparams[i],
               pname = "%" + new_name(fparam.id + "_fparam"),
@@ -177,6 +181,16 @@ function IR(theAST) {
         for (var i=0; i < stmts.length; i++) {
           stmts_ir.push.apply(stmts_ir, toIR(stmts[i],level,fnames));
         }
+
+        // Variables that refer to higher lexical scope
+        for (var i=0; i < lparams.length; i++) {
+          var lparam = lparams[i],
+              ldecl = st.lookup(lparam.id),
+              pname = ldecl.pname,
+              lltype = type_to_lltype(ldecl.type);
+            lparam_list.push(lltype + '* ' + pname);
+        }
+        param_list = lparam_list.concat(param_list);
 
         // Now output the IR
         // Add sub-program declarations at the top level
@@ -210,7 +224,7 @@ function IR(theAST) {
             new_fname = new_name(id),
             new_level = level+1;
 
-        st.insert(id, {name: new_fname, level: new_level,fparams:fparams});
+        st.insert(id, {name: new_fname, level: new_level,fparams:fparams,lparams:[]});
         st.begin_scope();
         ir.push.apply(ir, toIR(block,new_level,fnames.concat([id])));
         st.end_scope();
@@ -292,11 +306,21 @@ function IR(theAST) {
             if (!pdecl) {
               throw new Error("Unknown function '" + id + "'");
             }
-            var fparams = pdecl.fparams,
+            var lparams = pdecl.lparams,
+                fparams = pdecl.fparams,
                 param_list = [];
+            for(var i=0; i < lparams.length; i++) {
+              var lparam = lparams[i],
+                  litype = null;
+              ir.push.apply(ir, toIR(lparam,level,fnames));
+              litype = type_to_lltype(lparam.type);
+              param_list.push(litype + "* " + lparam.istack);
+            }
             for(var i=0; i < cparams.length; i++) {
               var cparam = cparams[i];
-              if (fparams[i].var) {
+              if (cparams[i].lparam) {
+                throw new Error("TODO handle lparam in call");
+              } else if (fparams[i].var) {
                 param_list.push(cparam.itype + "* " + cparam.istack);
               } else {
                 param_list.push(cparam.itype + " " + cparam.ilocal);
@@ -408,42 +432,52 @@ function IR(theAST) {
           case 'FALSE': ast.itype = "i1"; ast.ilocal = "false"; break;
           //case 'NIL': ast.rettype = "i32*"; ast.retref = "null"; break;
           default:
-            st.display();
-            var vdecl = st.lookup(ast.id),
-                lltype = type_to_lltype(vdecl.type),
+            var id = ast.id,
+                vdecl = st.lookup(ast.id),
+                type = vdecl.type,
+                lltype = type_to_lltype(type);
+                sname = vdecl.sname,
                 vlevel = vdecl.level;
-            ast.type = vdecl.type;
-            ast.itype = lltype;
-            console.warn("*** cur level:",level,"var level:",vdecl.level);
-            if (level === vdecl.level) {
-              // Variable in current lexical scope
-              if (vdecl.pname) {
-                // parameter register/variable
-                if (vdecl.var) {
-                  ast.ilocal = vdecl.pname;
-                  ast.istack = vdecl.pname;
-                } else {
-                  var sname = "%" + new_name(ast.id + "_stack");
-                  ast.ilocal = vdecl.pname;
-                  ast.istack = sname;
-                  ir.push('  ' + sname + ' = alloca ' + lltype);
-                  ir.push('  store ' + lltype + ' ' + vdecl.pname + ', ' + lltype + '* ' + sname);
-                }
-              } else {
-                // stack variable
-                var lname = "%" + new_name(ast.id + "_local");
-                ast.ilocal = lname;
-                ast.istack = vdecl.sname;
-                ir.push('  ' + lname + ' = load ' + lltype + '* ' + vdecl.sname);
-              }
-            } else {
-              // Variable in higher lexical scope, simulate static
+
+            // Add on any variables from a higher lexical scope first
+            if (level !== vdecl.level) {
+              // Variable is in higher lexical scope, simulate static
               // link by passing the variable through intervening
               // sub-programs
-              for(var l = level; l > vlevel; l--) {
-                console.warn("change:", fnames[l]);
+              for(var l = vlevel+1; l <= level; l++) {
+                var fname = fnames[l],
+                    pname = "%" + new_name(id + "_lparam"),
+                    pdecl = st.lookup(fname);
+                // replace vdecl and insert it at this level
+                vdecl = {node:'var_decl',type:type,pname:pname,sname:sname,var:true,lparam:true,level:l};
+                st.insert(id,vdecl,l);
+                // add the variable to the lparams (lexical variables) 
+                pdecl.lparams.push({node:'variable',id:id,type:type});
+                ast.ilocal = pname;
+                ast.istack = vdecl.sname;
+                st.replace(fname,pdecl);
               }
-              throw new Error("TODO: variable outside lexical scope");
+            }
+
+            ast.type = vdecl.type;
+            ast.itype = lltype;
+            // Variable in current lexical scope
+            if (vdecl.pname && !vdecl.var) {
+              var sname = "%" + new_name(id + "_stack");
+              ast.ilocal = vdecl.pname;
+              ast.istack = sname;
+              ir.push('  ' + sname + ' = alloca ' + lltype);
+              ir.push('  store ' + lltype + ' ' + vdecl.pname + ', ' + lltype + '* ' + sname);
+            } else {
+              // stack variable or var parameter
+              var lname = "%" + new_name(id + "_local");
+              ast.ilocal = lname;
+              if (vdecl.pname && vdecl.var) {
+                ast.istack = vdecl.pname;
+              } else {
+                ast.istack = vdecl.sname;
+              }
+              ir.push('  ' + lname + ' = load ' + lltype + '* ' + ast.istack);
             }
         }
         break;
