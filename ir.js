@@ -125,8 +125,9 @@ function IR(theAST) {
     switch (node) {
       case 'program':
         var name = ast.id,  // TODO: do anything with program name?
+            fparams = ast.fparams,
             block = ast.block;
-        st.insert('main', {name: 'main', level: level});
+        st.insert('main',{name:'main',level:level,fparams:fparams});
 
         ir.push("declare i32 @printf(i8*, ...)");
         ir.push("");
@@ -145,9 +146,23 @@ function IR(theAST) {
         var decls = ast.decls,
             stmts = ast.stmts,
             pdecl = st.lookup(fname),
+            fparams = pdecl.fparams,
+            param_list = [],
             pdecl_ir = [],
             vdecl_ir = [],
             stmts_ir = [];
+
+        for (var i=0; i < fparams.length; i++) {
+          var fparam = fparams[i],
+              pname = "%" + new_name(fparam.id + "_fparam"),
+              lltype = type_to_lltype(fparam.type);
+          st.insert(fparam.id,{node:'var_decl',type:fparam.type,pname:pname,var:fparam.var,level:level});
+          if (fparam.var) {
+            param_list.push(lltype + '* ' + pname);
+          } else {
+            param_list.push(lltype + ' ' + pname);
+          }
+        }
         // Evaluate the children. We might need to modify the
         // param-list based on internal variables that refer to higher
         // level lexical scope
@@ -167,7 +182,7 @@ function IR(theAST) {
         // Add sub-program declarations at the top level
         ir.push.apply(ir, pdecl_ir);
         ir.push('');
-        ir.push('define i32 @' + pdecl.name + '(' + ast.param_list.join(", ") +') {');
+        ir.push('define i32 @' + pdecl.name + '(' + param_list.join(", ") +') {');
         ir.push('entry:');
         // Add variable declarations inside the body definition
         ir.push.apply(ir, vdecl_ir);
@@ -193,29 +208,11 @@ function IR(theAST) {
             fparams = ast.fparams,
             block = ast.block,
             new_fname = new_name(id),
-            new_level = level+1,
-            param_list = [];
+            new_level = level+1;
 
         st.insert(id, {name: new_fname, level: new_level,fparams:fparams});
-
         st.begin_scope();
-
-        for (var i=0; i < fparams.length; i++) {
-          var fparam = fparams[i],
-              pname = "%" + new_name(fparam.id + "_fparam"),
-              lltype = type_to_lltype(fparam.type);
-          st.insert(fparam.id,{node:'var_decl',type:fparam.type,pname:pname,var:fparam.var,level:new_level});
-          if (fparam.var) {
-            param_list.push(lltype + '* ' + pname);
-          } else {
-            param_list.push(lltype + ' ' + pname);
-          }
-        }
-
-        ir.push('');
-        block.param_list = param_list;
         ir.push.apply(ir, toIR(block,new_level,fnames.concat([id])));
-
         st.end_scope();
         break;
 
