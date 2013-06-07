@@ -144,27 +144,35 @@ function IR(theAST) {
       case 'block':
         var decls = ast.decls,
             stmts = ast.stmts,
-            param_list = ast.param_list,
             pdecl = st.lookup(fname),
-            vdecl_ir = [];
+            pdecl_ir = [],
+            vdecl_ir = [],
+            stmts_ir = [];
+        // Evaluate the children. We might need to modify the
+        // param-list based on internal variables that refer to higher
+        // level lexical scope
         for (var i=0; i < decls.length; i++) {
           var decl = decls[i];
           if (decl.node === 'proc_decl' || decl.node === 'func_decl') {
-            // Add sub-program declrations at the top level
-            ir.push.apply(ir, toIR(decl,level,fnames));
+            pdecl_ir.push.apply(pdecl_ir, toIR(decl,level,fnames));
           } else {
-            // Postpone variable declarations until inside the body
             vdecl_ir.push.apply(vdecl_ir, toIR(decl,level,fnames));
           }
         }
+        for (var i=0; i < stmts.length; i++) {
+          stmts_ir.push.apply(stmts_ir, toIR(stmts[i],level,fnames));
+        }
+
+        // Now output the IR
+        // Add sub-program declarations at the top level
+        ir.push.apply(ir, pdecl_ir);
         ir.push('');
-        ir.push('define i32 @' + pdecl.name + '(' + param_list.join(", ") +') {');
+        ir.push('define i32 @' + pdecl.name + '(' + ast.param_list.join(", ") +') {');
         ir.push('entry:');
         // Add variable declarations inside the body definition
         ir.push.apply(ir, vdecl_ir);
-        for (var i=0; i < stmts.length; i++) {
-          ir.push.apply(ir, toIR(stmts[i],level,fnames));
-        }
+        // Postpone variable declarations until inside the body
+        ir.push.apply(ir, stmts_ir);
         ir.push('  ret i32 0');
         ir.push('}');
         break;
@@ -435,6 +443,9 @@ function IR(theAST) {
               // Variable in higher lexical scope, simulate static
               // link by passing the variable through intervening
               // sub-programs
+              for(var l = level; l > vlevel; l--) {
+                console.warn("change:", fnames[l]);
+              }
               throw new Error("TODO: variable outside lexical scope");
             }
         }
