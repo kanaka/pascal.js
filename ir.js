@@ -121,7 +121,7 @@ function IR(theAST) {
       indent = indent + "  ";
     }
 
-    console.warn("toIR",node,"level:", level, "fnames:", fnames, "ast:", JSON.stringify(ast));
+    //console.warn("toIR",node,"level:", level, "fnames:", fnames, "ast:", JSON.stringify(ast));
 
     switch (node) {
       case 'program':
@@ -340,6 +340,7 @@ function IR(theAST) {
         var expr = ast.expr,
             tstmt = ast.tstmt,
             fstmt = ast.fstmt;
+        ir.push('');
         ir.push('  ; if statement start');
         ir.push.apply(ir, toIR(expr,level,fnames));
         var br_name = new_name('br'),
@@ -349,12 +350,87 @@ function IR(theAST) {
         ir.push('  br ' + expr.itype + ' ' + expr.ilocal + ', label %' + br_true + ', label %' + br_false);
         ir.push('  ' + br_true + ':');
         ir.push.apply(ir, toIR(tstmt,level,fnames));
-        ir.push('    br label %' + br_done); 
+        ir.push('  br label %' + br_done); 
         ir.push('  ' + br_false + ':');
         ir.push.apply(ir, toIR(fstmt,level,fnames));
-        ir.push('    br label %' + br_done); 
+        ir.push('  br label %' + br_done); 
         ir.push('  ' + br_done + ':');
         ir.push('  ; if statement finish');
+        ir.push('');
+        break;
+
+      case 'stmt_for':
+        var index = ast.index,
+            start = ast.start,
+            by = ast.by,
+            end = ast.end,
+            stmt = ast.stmt,
+            for_label = new_name('for'),
+            for_start = for_label + 'start',
+            for_cond = for_label + 'cond',
+            for_body = for_label + 'body',
+            for_inc = for_label + 'inc',
+            for_end = for_label + 'end',
+            for_index = '%' + for_label + 'index',
+            for_cmp = '%' + for_label + 'cmp',
+            for_cmp1 = '%' + for_label + 'cmp1',
+            for_cmp2 = '%' + for_label + 'cmp2',
+            for_inc1 = '%' + for_label + 'inc1',
+            for0 = '%' + for_label + '0',
+            for1 = '%' + for_label + '1',
+            for2 = '%' + for_label + '2',
+            for3 = '%' + for_label + '3';
+
+        ir.push('');
+        ir.push('  ; for statement start');
+
+        ir.push.apply(ir, toIR(index,level,fnames));
+        ir.push.apply(ir, toIR(start,level,fnames));
+        ir.push.apply(ir, toIR(end,level,fnames));
+
+        if (by === 1) {
+          ir.push('  ' + for_cmp + ' = icmp sgt i32 ' + start.ilocal + ', ' + end.ilocal);
+        } else {
+          ir.push('  ' + for_cmp + ' = icmp slt i32 ' + start.ilocal + ', ' + end.ilocal);
+        }
+        ir.push('  br i1 ' + for_cmp + ', label %' + for_end + ', label %' + for_start);
+
+        ir.push('  br label %' + for_start); 
+
+        ir.push('');
+        ir.push('  ' + for_start + ':');
+        ir.push('  store ' + start.itype + ' ' + start.ilocal + ', ' + index.itype + '* ' + index.istack);
+        ir.push('  br label %' + for_cond); 
+
+        ir.push('');
+        ir.push('  ' + for_cond + ':');
+        ir.push('  ' + for1 + ' = load i32* ' + index.istack);
+        if (by === 1) {
+          ir.push('  ' + for_cmp1 + ' = icmp sle i32 ' + for1 + ', ' + end.ilocal);
+        } else {
+          ir.push('  ' + for_cmp1 + ' = icmp sge i32 ' + for1 + ', ' + end.ilocal);
+        }
+        ir.push('  br i1 ' + for_cmp1 + ', label %' + for_body + ', label %' + for_end);
+
+        ir.push('');
+        ir.push('  ' + for_body + ':');
+        ir.push.apply(ir, toIR(stmt,level,fnames));
+        ir.push('  ' + for2 + ' = load i32* ' + index.istack);
+        ir.push('  ' + for_cmp2 + ' = icmp eq i32 ' + for2 + ', ' + end.ilocal);
+        ir.push('  br i1 ' + for_cmp2 + ', label %' + for_end + ', label %' + for_inc);
+
+        ir.push('');
+        ir.push('  ' + for_inc + ':');
+        ir.push('  ' + for3 + ' = load i32* ' + index.istack);
+        ir.push('  ' + for_inc1 + ' = add nsw i32 ' + for3 + ', ' + by);
+        ir.push('  store i32 ' + for_inc1 + ', i32* ' + index.istack);
+        ir.push('  br label %' + for_cond);
+
+        ir.push('');
+        ir.push('  ' + for_end + ':');
+
+        ir.push('  ; for statement finish');
+        ir.push('');
         break;
 
       case 'expr_binop':
