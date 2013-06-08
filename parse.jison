@@ -160,7 +160,7 @@ proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl
                 |
                 ;
 func_decl       : id formal_params COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6}; }}
-                | id               COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$4,block:$6}; }}
+                | id               COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5}; }}
                 |
                 ;
 formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}
@@ -217,6 +217,7 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                 | lvalue                                {{ $$ = $1; }}
                 | LPAREN expr RPAREN                    {{ $$ = $2; }}
                 | MINUS expr                            {{ $$ = {node:'expr_unop',op:'minus',expr:$2}; }}
+                | NOT expr                              {{ $$ = {node:'expr_unop',op:'not',expr:$2}; }}
                 | expr PLUS expr                        {{ $$ = {node:'expr_binop',op:'plus',left:$1,right:$3}; }}
                 | expr MINUS expr                       {{ $$ = {node:'expr_binop',op:'minus',left:$1,right:$3}; }}
                 | expr STAR expr                        {{ $$ = {node:'expr_binop',op:'star',left:$1,right:$3}; }}

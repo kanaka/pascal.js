@@ -36,7 +36,7 @@ function SymbolTable() {
     if (typeof(idx) !== "undefined") {
       return data[idx][name];
     }
-    return undefined;
+    throw new Error("Name '" + name + "' not found in symbol table");
   }
 
   function insert(name, value, level) {
@@ -194,22 +194,23 @@ function IR(theAST) {
 
         // Now output the IR
         // Add sub-program declarations at the top level
+        var pitype = pdecl.itype || "i32";
         ir.push.apply(ir, pdecl_ir);
         ir.push('');
-        ir.push('define i32 @' + pdecl.name + '(' + param_list.join(", ") +') {');
+        ir.push('define ' + pitype + ' @' + pdecl.name + '(' + param_list.join(", ") +') {');
         ir.push('entry:');
         if (pdecl.ireturn) {
-          ir.push('  %retval = alloca ' + pdecl.itype);
+          ir.push('  %retval = alloca ' + pitype);
         }
         // Add variable declarations inside the body definition
         ir.push.apply(ir, vdecl_ir);
         // Postpone variable declarations until inside the body
         ir.push.apply(ir, stmts_ir);
         if (pdecl.ireturn) {
-          ir.push('  %retreg = load ' + pdecl.itype + '* %retval');
-          ir.push('  ret ' + pdecl.itype + ' %retreg');
+          ir.push('  %retreg = load ' + pitype + '* %retval');
+          ir.push('  ret ' + pitype + ' %retreg');
         } else {
-          ir.push('  ret i32 0');
+          ir.push('  ret ' + pitype + ' 0');
         }
         ir.push('}');
         break;
@@ -245,14 +246,19 @@ function IR(theAST) {
             expr = ast.expr
             lltype = null;
         ir.push.apply(ir,toIR(expr,level,fnames));
-        ir.push.apply(ir,toIR(lvalue,level,fnames));
         if (lvalue.id === fname) {
+          // This is actually a function name being used to set the
+          // return value for the function so we don't evaluate the
+          // lvalue
           var pdecl = st.lookup(fname);
+          lvalue.type = pdecl.type;
+          lvalue.itype = type_to_lltype(pdecl.type);
           pdecl.ireturn = true;
           pdecl.itype = lvalue.itype;
           ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + pdecl.itype + '* %retval');
           st.replace(fname,pdecl);
         } else {
+          ir.push.apply(ir,toIR(lvalue,level,fnames));
           ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
         }
         ast.itype = lvalue.itype;
@@ -346,10 +352,11 @@ function IR(theAST) {
               }
             }
             if (node === 'expr_call') {
-              var ret = '%' + new_name(pdecl.name + "_ret");
-              ir.push('  ' + ret + ' = call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
+              var ret = '%' + new_name(pdecl.name + "_ret"),
+                pitype = type_to_lltype(pdecl.type);
+              ir.push('  ' + ret + ' = call ' + pitype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
               ast.type = pdecl.type;
-              ast.itype = type_to_lltype(pdecl.type);
+              ast.itype = pitype;
               ast.ilocal = ret;
             } else {
               ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
@@ -507,6 +514,9 @@ function IR(theAST) {
           case 'minus':
             ir.push('  ' + dest_name + ' = sub i32 0, ' + expr.ilocal);
             break;
+          case 'not':
+            ir.push('  ' + dest_name + ' = xor i1 1, ' + expr.ilocal);
+            break;
           default: throw new Error("Unexpected expr_unop operand " + ast.op);
         }
         ast.type = expr.type;
@@ -543,8 +553,11 @@ function IR(theAST) {
                 vlevel = vdecl.level;
 
             if (vdecl.fparams) {
-              ast.type = vdecl.type;
-              ast.itype = lltype;
+              // This is actually a function call expression so
+              // replace the AST with a function and evalutate it
+              ast.node = 'expr_call';
+              ast.call_params = [];
+              ir.push.apply(ir, toIR(ast,level,fnames));
               break;
             }
 
