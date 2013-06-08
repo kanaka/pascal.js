@@ -1,4 +1,5 @@
 TESTDIR ?= tests
+BUILDDIR ?= build
 
 TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
 	 func1 ffib \
@@ -11,21 +12,53 @@ TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
 	 array1 array2 \
 	 book9-4
 
+FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%)
+LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.ll)
+FPC_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out1)
+LL_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out2)
+
+DIFFS=$(TESTS:%=$(BUILDDIR)/%.diff)
+
 all:
 	jison parse.jison
 
-test:
+clean:
+	rm $(BUILDDIR)/*
+
+$(FPC_OBJECTS): $(BUILDDIR)/%: $(TESTDIR)/%.pas
+	fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"; \
+
+$(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas
+	node ir.js $< > $@
+
+$(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
+	$< > $@
+
+$(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.ll
+	lli $< > $@
+
+$(DIFFS): $(BUILDDIR)/%.diff: $(BUILDDIR)/%.out1 $(BUILDDIR)/%.out2
+	diff -u $^ > $@
+
+
+test_prefix:
+	@echo "Building tests: $(TESTS)"
+
+test: test_prefix $(DIFFS)
 	@set -e; \
-	mkdir -p build; \
+	mkdir -p $(BUILDDIR); \
+	pass=""; \
+	fail=""; \
 	for test in $(TESTS); do \
-	    echo "Testing $${test}"; \
-	    fpc -FEbuild $(TESTDIR)/$${test}.pas | egrep -v "Compiler version|Copyright|Target OS"; \
-	    build/$${test} > build/$${test}.out1; \
-	    node ir.js $(TESTDIR)/$${test}.pas > build/$${test}.ll; \
-	    lli build/$${test}.ll > build/$${test}.out2; \
-	    if ! cmp build/$${test}.out1 build/$${test}.out2; then \
+	    diffs=`cat $(BUILDDIR)/$${test}.diff`; \
+	    if [ -z "$${diffs}" ]; then \
+	        pass="$${pass}$${test} "; \
+	    else \
 		echo "Output differences for test $${test}:"; \
-		diff -u build/$${test}.out1 build/$${test}.out2; \
+		echo -e "$${diffs}"; \
+	        fail="$${fail}$${test} "; \
 	    fi; \
 	done; \
-	echo "Ran all $(words $(TESTS)) tests successfully"
+	[ -z "$${fail}" ] && echo "All tests passed"; \
+	[ -n "$${fail}" ] && echo "Failing tests: $${fail}"; \
+	true
