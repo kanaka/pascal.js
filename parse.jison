@@ -9,7 +9,7 @@ STRING                  "'"[^']*"'"
 REAL                    [0-9]+"."[0-9]*     
 INTEGER                 [0-9]+
 BOOLEAN                 "TRUE"|"FALSE"
-ID                      [A-Za-z][A-Za-z0-9]*
+ID                      [A-Za-z_][A-Za-z0-9_]*
 WHITESPACE              \s+
 
 %%
@@ -172,6 +172,7 @@ type            : INTEGER                               {{ $$ = {node:'type',nam
 //                | subrange_type                         {{ }}
                 /* structured types */
                 | ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:$3,type:$6}; }}
+//                | ARRAY                       OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:[{node:'subrange',start:0,end:null}],type:$3}; }}
 //                | RECORD r_sections END                 {{ }}
 //                | RECORD r_sections SEMI variant END    {{ }}
 //                | RECORD variant END                    {{ }}
