@@ -179,6 +179,7 @@ fp_section      : ids COLON id                          {{ $$ = [];
                 ;
 
 cstmt           : BEGIN stmts END                       {{ $$ = $2; }}
+                | BEGIN stmts SEMI END                  {{ $$ = $2; }}
                 ;
 stmts           : stmts SEMI stmt                       {{ $$ = $1.concat($3); }}
                 |            stmt                       {{ $$ = [$1]; }}
