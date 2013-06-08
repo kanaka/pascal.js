@@ -484,6 +484,45 @@ function IR(theAST) {
         ir.push('');
         break;
 
+      case 'stmt_while':
+        var expr = ast.expr,
+            stmt = ast.stmt,
+            while_label = new_name('while'),
+            while_cond = while_label + 'cond',
+            while_body = while_label + 'body',
+            while_end = while_label + 'end',
+            for_index = '%' + for_label + 'index',
+            for_cmp = '%' + for_label + 'cmp',
+            for_cmp1 = '%' + for_label + 'cmp1',
+            for_cmp2 = '%' + for_label + 'cmp2',
+            for_inc1 = '%' + for_label + 'inc1',
+            for0 = '%' + for_label + '0',
+            for1 = '%' + for_label + '1',
+            for2 = '%' + for_label + '2',
+            for3 = '%' + for_label + '3';
+
+        ir.push('');
+        ir.push('  ; while statement start');
+
+        ir.push('  br label %' + while_cond); 
+
+        ir.push('');
+        ir.push('  ' + while_cond + ':');
+        ir.push.apply(ir, toIR(expr,level,fnames));
+        ir.push('  br i1 ' + expr.ilocal + ', label %' + while_body + ', label %' + while_end);
+
+        ir.push('');
+        ir.push('  ' + while_body + ':');
+        ir.push.apply(ir, toIR(stmt,level,fnames));
+        ir.push('  br label %' + while_cond);
+
+        ir.push('');
+        ir.push('  ' + while_end + ':');
+
+        ir.push('  ; while statement finish');
+        ir.push('');
+        break;
+
       case 'expr_binop':
         var left = ast.left,
             right = ast.right,

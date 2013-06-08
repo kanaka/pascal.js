@@ -228,15 +228,21 @@ closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assi
                 | lvalue                                {{ $$ = {node:'stmt_call',id:$1.id,call_params:[]}; }}
                 | cstmt                                 {{ $$ = {node:'stmt_compound',stmts:$1}; }}
                 | closed_if_stmt                        {{ $$ = $1; }}
+                | closed_while_stmt                     {{ $$ = $1; }}
                 | closed_for_stmt                       {{ $$ = $1; }}
                 ;
 open_stmt       : open_if_stmt                          {{ $$ = $1; }}
+                | open_while_stmt                       {{ $$ = $1; }}
                 | open_for_stmt                         {{ $$ = $1; }}
                 ;
 closed_if_stmt  : IF expr THEN closed_stmt ELSE closed_stmt {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:$6}; }}
                 ;
 open_if_stmt    : IF expr THEN stmt                         {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:null}; }}
                 | IF expr THEN closed_stmt ELSE open_stmt   {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:$6}; }}
+                ;
+closed_while_stmt : WHILE expr DO closed_stmt           {{ $$ = {node:'stmt_while',expr:$2,stmt:$4}; }}
+                ;
+open_while_stmt : WHILE expr DO open_stmt               {{ $$ = {node:'stmt_while',expr:$2,stmt:$4}; }}
                 ;
 closed_for_stmt : FOR lvalue ASSIGN expr TO     expr DO closed_stmt {{ $$ = {node:'stmt_for',index:$2,start:$4,by:1, end:$6,stmt:$8}; }}
                 | FOR lvalue ASSIGN expr DOWNTO expr DO closed_stmt {{ $$ = {node:'stmt_for',index:$2,start:$4,by:-1,end:$6,stmt:$8}; }}
