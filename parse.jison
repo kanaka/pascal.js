@@ -8,6 +8,7 @@
 STRING                  "'"[^']*"'"
 REAL                    [0-9]+"."[0-9]*     
 INTEGER                 [0-9]+
+BOOLEAN                 "TRUE"|"FALSE"
 ID                      [A-Za-z][A-Za-z0-9]*
 WHITESPACE              \s+
 
@@ -88,10 +89,17 @@ WHITESPACE              \s+
 "WHILE"                 return "WHILE";
 "WITH"                  return "WITH";
 
+/* built-in types */
+"INTEGER"               return "INTEGER";
+"REAL"                  return "REAL";
+"STRING"                return "STRING";
+"BOOLEAN"               return "BOOLEAN";
 
-{STRING}                return "STRING_LITERAL";
-{REAL}                  return "REAL_LITERAL";
 {INTEGER}               return "INTEGER_LITERAL";
+{REAL}                  return "REAL_LITERAL";
+{STRING}                return "STRING_LITERAL";
+"TRUE"                  return "TRUE_LITERAL";
+"FALSE"                 return "FALSE_LITERAL";
 
 {ID}                    return "ID";
 
@@ -150,17 +158,25 @@ decl            : VAR var_decls SEMI                    {{ $$ = $2; }}
 var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
                 |                var_decl               {{ $$ = $1; }}
                 ;
-var_decl        : ids COLON id                          {{ $$ = [];
+var_decl        : ids COLON type                        {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
                                                              $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
+                ;
+type            : INTEGER                               {{ $$ = 'INTEGER'; }}
+                | REAL                                  {{ $$ = 'REAL'; }}
+                | STRING                                {{ $$ = 'STRING'; }}
+                | BOOLEAN                               {{ $$ = 'BOOLEAN'; }}
+                | ordinal_type                          {{ $$ = $1; }}
+                | structured_type                       {{ $$ = $1; }}
+                | pointer_type                          {{ $$ = $1; }}
                 ;
 
 proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
                 | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$4}; }}
                 |
                 ;
-func_decl       : id formal_params COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6}; }}
-                | id               COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5}; }}
+func_decl       : id formal_params COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6}; }}
+                | id               COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5}; }}
                 |
                 ;
 formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}
@@ -170,10 +186,10 @@ fp_sections     : fp_sections SEMI fp_section           {{ $$ = $1.concat($3); }
                 |                  fp_section           {{ $$ = $1; }}
                 ;
 /* fp_section is plural (array) */
-fp_section      : ids COLON id                          {{ $$ = [];
+fp_section      : ids COLON type                        {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
                                                              $$ = $$.concat([{node:'param',id:$1[i],type:$3,var:false}]); } }}
-                | VAR ids COLON id                      {{ $$ = [];
+                | VAR ids COLON type                    {{ $$ = [];
                                                            for(var i=0; i < $2.length; i++) {
                                                              $$ = $$.concat([{node:'param',id:$2[i],type:$4,var:true}]); } }}
                 ;
@@ -215,6 +231,8 @@ exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); 
 expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:'INTEGER',val:parseInt($1)}; }}
                 | REAL_LITERAL                          {{ $$ = {node:'real',type:'REAL',val:parseFloat($1)}; }}
                 | STRING_LITERAL                        {{ $$ = {node:'string',type:'STRING',val:$1.substr(1,$1.length-2)}; }}
+                | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:'BOOLEAN',val:true}; }}
+                | FALSE_LITERAL                         {{ $$ = {node:'boolean',type:'BOOLEAN',val:false}; }}
                 | lvalue                                {{ $$ = $1; }}
                 | LPAREN expr RPAREN                    {{ $$ = $2; }}
                 | MINUS expr                            {{ $$ = {node:'expr_unop',op:'minus',expr:$2}; }}

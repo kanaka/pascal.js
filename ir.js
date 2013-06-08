@@ -287,9 +287,9 @@ function IR(theAST) {
                   v = vcnt++,
                   format = null;
               switch (param.type) {
-                case 'STRING':  format = "@.str_format"; break;
                 case 'INTEGER': format = "@.int_format"; break;
                 case 'REAL':    format = "@.float_format"; break;
+                case 'STRING':  format = "@.str_format"; break;
                 case 'BOOLEAN':
                   var br_name = new_name('br'),
                       br_true = br_name + '_true',
@@ -528,6 +528,9 @@ function IR(theAST) {
         ast.itype = "i32";
         ast.ilocal = ast.val;
         break;
+      case 'real':
+        throw new Error("TODO: support reals");
+        break;
       case 'string':
         var sval = ast.val,
             slen = sval.length+1,
@@ -538,69 +541,67 @@ function IR(theAST) {
         ast.ilocal = sname;
         ast.iref = sname;
         break;
+      case 'boolean':
+        ast.itype = "i1";
+        ast.ilocal = ast.val.toString();
+        break;
 
       case 'variable':
-        switch (ast.id) {
-          case 'TRUE': ast.itype = "i1"; ast.ilocal = "true"; break;
-          case 'FALSE': ast.itype = "i1"; ast.ilocal = "false"; break;
-          //case 'NIL': ast.rettype = "i32*"; ast.retref = "null"; break;
-          default:
-            var id = ast.id,
-                vdecl = st.lookup(ast.id),
-                type = vdecl.type,
-                lltype = type_to_lltype(type);
-                sname = vdecl.sname,
-                vlevel = vdecl.level;
+        var id = ast.id,
+            vdecl = st.lookup(ast.id),
+            type = vdecl.type,
+            lltype = type_to_lltype(type);
+            sname = vdecl.sname,
+            vlevel = vdecl.level;
 
-            if (vdecl.fparams) {
-              // This is actually a function call expression so
-              // replace the AST with a function and evalutate it
-              ast.node = 'expr_call';
-              ast.call_params = [];
-              ir.push.apply(ir, toIR(ast,level,fnames));
-              break;
-            }
+        if (vdecl.fparams) {
+          // This is actually a function call expression so
+          // replace the AST with a function and evalutate it
+          ast.node = 'expr_call';
+          ast.call_params = [];
+          ir.push.apply(ir, toIR(ast,level,fnames));
+          break;
+        }
 
-            // Add on any variables from a higher lexical scope first
-            if (level !== vdecl.level) {
-              // Variable is in higher lexical scope, simulate static
-              // link by passing the variable through intervening
-              // sub-programs
-              for(var l = vlevel+1; l <= level; l++) {
-                var fname = fnames[l],
-                    pname = "%" + new_name(id + "_lparam"),
-                    pdecl = st.lookup(fname);
-                // replace vdecl and insert it at this level
-                vdecl = {node:'var_decl',type:type,pname:pname,sname:sname,var:true,lparam:true,level:l};
-                st.insert(id,vdecl,l);
-                // add the variable to the lparams (lexical variables) 
-                pdecl.lparams.push({node:'variable',id:id,type:type});
-                ast.ilocal = pname;
-                ast.istack = vdecl.sname;
-                st.replace(fname,pdecl);
-              }
-            }
+        // Add on any variables from a higher lexical scope first
+        if (level !== vdecl.level) {
+          // Variable is in higher lexical scope, simulate static
+          // link by passing the variable through intervening
+          // sub-programs
+          for(var l = vlevel+1; l <= level; l++) {
+            var fname = fnames[l],
+                pname = "%" + new_name(id + "_lparam"),
+                pdecl = st.lookup(fname);
+            // replace vdecl and insert it at this level
+            vdecl = {node:'var_decl',type:type,pname:pname,sname:sname,var:true,lparam:true,level:l};
+            st.insert(id,vdecl,l);
+            // add the variable to the lparams (lexical variables) 
+            pdecl.lparams.push({node:'variable',id:id,type:type});
+            ast.ilocal = pname;
+            ast.istack = vdecl.sname;
+            st.replace(fname,pdecl);
+          }
+        }
 
-            ast.type = vdecl.type;
-            ast.itype = lltype;
-            // Variable in current lexical scope
-            if (vdecl.pname && !vdecl.var) {
-              var sname = "%" + new_name(id + "_stack");
-              ast.ilocal = vdecl.pname;
-              ast.istack = sname;
-              ir.push('  ' + sname + ' = alloca ' + lltype);
-              ir.push('  store ' + lltype + ' ' + vdecl.pname + ', ' + lltype + '* ' + sname);
-            } else {
-              // stack variable or var parameter
-              var lname = "%" + new_name(id + "_local");
-              ast.ilocal = lname;
-              if (vdecl.pname && vdecl.var) {
-                ast.istack = vdecl.pname;
-              } else {
-                ast.istack = vdecl.sname;
-              }
-              ir.push('  ' + lname + ' = load ' + lltype + '* ' + ast.istack);
-            }
+        ast.type = vdecl.type;
+        ast.itype = lltype;
+        // Variable in current lexical scope
+        if (vdecl.pname && !vdecl.var) {
+          var sname = "%" + new_name(id + "_stack");
+          ast.ilocal = vdecl.pname;
+          ast.istack = sname;
+          ir.push('  ' + sname + ' = alloca ' + lltype);
+          ir.push('  store ' + lltype + ' ' + vdecl.pname + ', ' + lltype + '* ' + sname);
+        } else {
+          // stack variable or var parameter
+          var lname = "%" + new_name(id + "_local");
+          ast.ilocal = lname;
+          if (vdecl.pname && vdecl.var) {
+            ast.istack = vdecl.pname;
+          } else {
+            ast.istack = vdecl.sname;
+          }
+          ir.push('  ' + lname + ' = load ' + lltype + '* ' + ast.istack);
         }
         break;
 
