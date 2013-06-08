@@ -85,21 +85,24 @@ function IR(theAST) {
     return name + "_" + (name_cnt++) + "_";
   }
 
-  function type_to_lltype(type) {
+  function type_to_lltype(type,offset) {
     switch (type.name) {
       case 'INTEGER': return "i32"; break;
       case 'REAL':    return "float"; break;
       case 'BOOLEAN': return "i1"; break;
       case 'ARRAY':
+        if (typeof offset === 'undefined') {
+          offset = 0;
+        }
         var res = "",
             indexes = type.indexes;
-        for (var i=0; i<indexes.length; i++) {
+        for (var i=offset; i<indexes.length; i++) {
           var start = indexes[i].start,
               end = indexes[i].end;
           res = res + '[' + (end-start+1) + ' x ';
         }
         res = res + type_to_lltype(type.type);
-        for (var i=0; i<indexes.length; i++) {
+        for (var i=offset; i<indexes.length; i++) {
           res = res + ']';
         }
         return res;
@@ -542,18 +545,29 @@ function IR(theAST) {
         // TODO: support multi-level arrays
         var lvalue = ast.lvalue,
             adecl = st.lookup(lvalue.id),
-            expr = ast.exprs[0];
-        ir.push.apply(ir, toIR(expr,level,fnames));
+            exprs = ast.exprs;
         ir.push.apply(ir, toIR(lvalue,level,fnames));
-        var start = lvalue.type.indexes[0].start,
-            end = lvalue.type.indexes[0].end,
-            aidx = '%' + new_name(lvalue.id + '_arrayidx'),
-            aoff = '%' + new_name(lvalue.id + '_arrayoff'),
+        var indexes = lvalue.type.indexes,
+            start = indexes[0].start,
+            end = indexes[0].end,
             aval = '%' + new_name(lvalue.id + '_arrayval'),
+            aidx, aoff,
             lltype = type_to_lltype(adecl.type.type);
-        // TODO: generate index checks and assertion errors
-        ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
-        ir.push('  ' + aoff + ' = getelementptr inbounds ' + lvalue.itype + '* ' + lvalue.istack + ', i32 0, ' + expr.itype + ' ' + aidx);
+        if (exprs.length !== indexes.length) {
+          throw new Error('Array dimension mismatch for ' + lvalue.id);
+        }
+        var illstack = lvalue.istack;
+        for (var i=0; i < exprs.length; i++) {
+          var expr = exprs[i]
+              illtype = type_to_lltype(lvalue.type,i);
+          aidx = '%' + new_name(lvalue.id + '_arrayidx');
+          aoff = '%' + new_name(lvalue.id + '_arrayoff');
+          ir.push.apply(ir, toIR(expr,level,fnames));
+          // TODO: generate index checks and assertion errors
+          ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
+          ir.push('  ' + aoff + ' = getelementptr inbounds ' + illtype + '* ' + illstack + ', i32 0, ' + expr.itype + ' ' + aidx);
+          illstack = aoff;
+        }
         ir.push('  ' + aval + ' = load ' + lltype + '* ' + aoff);
         ast.type = adecl.type.type;
         ast.itype = lltype;
