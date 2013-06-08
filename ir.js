@@ -86,11 +86,11 @@ function IR(theAST) {
   }
 
   function type_to_lltype(type) {
-    switch (type) {
+    switch (type.name) {
       case 'INTEGER': return "i32"; break;
       case 'REAL':    return "float"; break;
       case 'BOOLEAN': return "i1"; break;
-      default: throw new Error("TODO: handle " + type + " return value");
+      default: throw new Error("TODO: handle " + type.name + " type");
     }
   }
 
@@ -121,7 +121,7 @@ function IR(theAST) {
       indent = indent + "  ";
     }
 
-    console.warn("toIR",node,"level:", level, "fnames:", fnames, "ast:", JSON.stringify(ast));
+    //console.warn("toIR",node,"level:", level, "fnames:", fnames, "ast:", JSON.stringify(ast));
 
     switch (node) {
       case 'program':
@@ -286,7 +286,7 @@ function IR(theAST) {
               var param = cparams[i],
                   v = vcnt++,
                   format = null;
-              switch (param.type) {
+              switch (param.type.name) {
                 case 'INTEGER': format = "@.int_format"; break;
                 case 'REAL':    format = "@.float_format"; break;
                 case 'STRING':  format = "@.str_format"; break;
@@ -312,7 +312,7 @@ function IR(theAST) {
                   param.ilocal = bool_local_out;
                   break;
                 default:
-                  throw new Error("Unknown WRITE type: " + param.type);
+                  throw new Error("Unknown WRITE type: " + param.type.name);
               }
               ir.push('  %str' + v + ' = getelementptr inbounds [3 x i8]* ' + format + ', i32 0, i32 0');
               ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ', ' +
