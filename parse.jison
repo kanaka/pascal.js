@@ -171,7 +171,7 @@ type            : INTEGER                               {{ $$ = {node:'type',nam
 //                | enumerated_type                       {{ }}
 //                | subrange_type                         {{ }}
                 /* structured types */
-                | ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'array',indexes:$3}; }}
+                | ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:$3,type:$6}; }}
 //                | RECORD r_sections END                 {{ }}
 //                | RECORD r_sections SEMI variant END    {{ }}
 //                | RECORD variant END                    {{ }}
@@ -181,13 +181,13 @@ type            : INTEGER                               {{ $$ = {node:'type',nam
 //                | CARET id                              {{ }}
                 ;
 indexes         : indexes COMMA ordinal_type            {{ $$ = $1.concat($3); }}
-                | ordinal_type                          {{ $$ = $1; }}
+                | ordinal_type                          {{ $$ = [$1]; }}
                 ;
 ordinal_type    : subrange_type                         {{ $$ = $1; }}
 //                | enumerated_type                       {{ }}
                 | id
                 ;
-subrange_type   : INTEGER_LITERAL DOT DOT INTEGER_LITERAL {{ $$ = {node:'subrange',start:$1,end:$3}; }}
+subrange_type   : INTEGER_LITERAL DOT DOT INTEGER_LITERAL {{ $$ = {node:'subrange',start:parseInt($1),end:parseInt($4)}; }}
                 ;
 
 proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
@@ -278,8 +278,8 @@ call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
                 ;
 
 lvalue          : id                                    {{ $$ = {node:'variable',id:$1}; }}
-                | lvalue LBRACK exprs RBRACK            {{ $$ = {node:'expr_array_deref',indexes:$3}; }}
-//                | lvalue DOT id                         {{ $$ = {node:'expr_record_deref',component:$3}; }}
+                | lvalue LBRACK exprs RBRACK            {{ $$ = {node:'expr_array_deref',lvalue:$1,exprs:$3}; }}
+//                | lvalue DOT id                         {{ $$ = {node:'expr_record_deref',lvalue:$1,component:$3}; }}
                 ;
 ids             : ids COMMA id                          {{ $$ = $1.concat([$3]); }}
                 | id                                    {{ $$ = [$1]; }}

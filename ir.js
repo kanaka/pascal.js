@@ -90,6 +90,20 @@ function IR(theAST) {
       case 'INTEGER': return "i32"; break;
       case 'REAL':    return "float"; break;
       case 'BOOLEAN': return "i1"; break;
+      case 'ARRAY':
+        var res = "",
+            indexes = type.indexes;
+        for (var i=0; i<indexes.length; i++) {
+          var start = indexes[i].start,
+              end = indexes[i].end;
+          res = res + '[' + (end-start+1) + ' x ';
+        }
+        res = res + type_to_lltype(type.type);
+        for (var i=0; i<indexes.length; i++) {
+          res = res + ']';
+        }
+        return res;
+        break;
       default: throw new Error("TODO: handle " + type.name + " type");
     }
   }
@@ -522,6 +536,29 @@ function IR(theAST) {
         ast.type = expr.type;
         ast.itype = expr.itype;
         ast.ilocal = dest_name;
+        break;
+
+      case 'expr_array_deref':
+        // TODO: support multi-level arrays
+        var lvalue = ast.lvalue,
+            adecl = st.lookup(lvalue.id),
+            expr = ast.exprs[0];
+        ir.push.apply(ir, toIR(expr,level,fnames));
+        ir.push.apply(ir, toIR(lvalue,level,fnames));
+        var start = lvalue.type.indexes[0].start,
+            end = lvalue.type.indexes[0].end,
+            aidx = '%' + new_name(lvalue.id + '_arrayidx'),
+            aoff = '%' + new_name(lvalue.id + '_arrayoff'),
+            aval = '%' + new_name(lvalue.id + '_arrayval'),
+            lltype = type_to_lltype(adecl.type.type);
+        // TODO: generate index checks and assertion errors
+        ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
+        ir.push('  ' + aoff + ' = getelementptr inbounds ' + lvalue.itype + '* ' + lvalue.istack + ', i32 0, ' + expr.itype + ' ' + aidx);
+        ir.push('  ' + aval + ' = load ' + lltype + '* ' + aoff);
+        ast.type = adecl.type.type;
+        ast.itype = lltype;
+        ast.istack = aoff;
+        ast.ilocal = aval;
         break;
 
       case 'integer':
