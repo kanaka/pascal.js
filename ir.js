@@ -121,7 +121,7 @@ function IR(theAST) {
       indent = indent + "  ";
     }
 
-    //console.warn("toIR",node,"level:", level, "fnames:", fnames, "ast:", JSON.stringify(ast));
+    console.warn("toIR",node,"level:", level, "fnames:", fnames, "ast:", JSON.stringify(ast));
 
     switch (node) {
       case 'program':
@@ -198,17 +198,25 @@ function IR(theAST) {
         ir.push('');
         ir.push('define i32 @' + pdecl.name + '(' + param_list.join(", ") +') {');
         ir.push('entry:');
+        if (pdecl.ireturn) {
+          ir.push('  %retval = alloca ' + pdecl.itype);
+        }
         // Add variable declarations inside the body definition
         ir.push.apply(ir, vdecl_ir);
         // Postpone variable declarations until inside the body
         ir.push.apply(ir, stmts_ir);
-        ir.push('  ret i32 0');
+        if (pdecl.ireturn) {
+          ir.push('  %retreg = load ' + pdecl.itype + '* %retval');
+          ir.push('  ret ' + pdecl.itype + ' %retreg');
+        } else {
+          ir.push('  ret i32 0');
+        }
         ir.push('}');
         break;
 
       case 'var_decl':
         var id = ast.id,
-            type = ast.type.toUpperCase(),
+            type = ast.type,
             pdecl = st.lookup(fname),
             sname = "%" + new_name(id + "_stack");
 
@@ -218,13 +226,15 @@ function IR(theAST) {
         break;
 
       case 'proc_decl':
-        var id = ast.id.toUpperCase(),
+      case 'func_decl':
+        var id = ast.id,
+            type = ast.type,
             fparams = ast.fparams,
             block = ast.block,
             new_fname = new_name(id),
             new_level = level+1;
 
-        st.insert(id, {name: new_fname, level: new_level,fparams:fparams,lparams:[]});
+        st.insert(id, {name: new_fname, type:type, level: new_level,fparams:fparams,lparams:[]});
         st.begin_scope();
         ir.push.apply(ir, toIR(block,new_level,fnames.concat([id])));
         st.end_scope();
@@ -236,14 +246,23 @@ function IR(theAST) {
             lltype = null;
         ir.push.apply(ir,toIR(expr,level,fnames));
         ir.push.apply(ir,toIR(lvalue,level,fnames));
-        ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
+        if (lvalue.id === fname) {
+          var pdecl = st.lookup(fname);
+          pdecl.ireturn = true;
+          pdecl.itype = lvalue.itype;
+          ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + pdecl.itype + '* %retval');
+          st.replace(fname,pdecl);
+        } else {
+          ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
+        }
         ast.itype = lvalue.itype;
         ast.istack = lvalue.istack;
         ast.ilocal = lvalue.ilocal;
         break;
 
       case 'stmt_call':
-        var id = ast.id.toUpperCase(),
+      case 'expr_call':
+        var id = ast.id,
             cparams = (ast.call_params || []);
         // evaluate the parameters
         for(var i=0; i < cparams.length; i++) {
@@ -326,7 +345,15 @@ function IR(theAST) {
                 param_list.push(cparam.itype + " " + cparam.ilocal);
               }
             }
-            ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
+            if (node === 'expr_call') {
+              var ret = '%' + new_name(pdecl.name + "_ret");
+              ir.push('  ' + ret + ' = call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
+              ast.type = pdecl.type;
+              ast.itype = type_to_lltype(pdecl.type);
+              ast.ilocal = ret;
+            } else {
+              ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
+            }
         }
         break;
 
@@ -503,7 +530,7 @@ function IR(theAST) {
         break;
 
       case 'variable':
-        switch (ast.id.toUpperCase()) {
+        switch (ast.id) {
           case 'TRUE': ast.itype = "i1"; ast.ilocal = "true"; break;
           case 'FALSE': ast.itype = "i1"; ast.ilocal = "false"; break;
           //case 'NIL': ast.rettype = "i32*"; ast.retref = "null"; break;
@@ -514,6 +541,12 @@ function IR(theAST) {
                 lltype = type_to_lltype(type);
                 sname = vdecl.sname,
                 vlevel = vdecl.level;
+
+            if (vdecl.fparams) {
+              ast.type = vdecl.type;
+              ast.itype = lltype;
+              break;
+            }
 
             // Add on any variables from a higher lexical scope first
             if (level !== vdecl.level) {

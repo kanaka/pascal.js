@@ -1,10 +1,11 @@
-TESTS ?= proc1 proc2 proc3 proc4 proc5 \
+TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
+	 func1 ffib \
 	 expr1 \
 	 if1 if2 \
 	 nested1 nested2 \
 	 write1 write2 \
 	 for1 for2 \
-	 book9-4 pfib
+	 book9-4
 
 all:
 	jison parse.jison
@@ -22,4 +23,5 @@ test:
 		echo "Output differences for test $${test}:"; \
 		diff -u build/$${test}.out1 build/$${test}.out2; \
 	    fi; \
-	done
+	done; \
+	echo "Ran all $(words $(TESTS)) tests successfully"

@@ -152,15 +152,15 @@ var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }
                 ;
 var_decl        : ids COLON id                          {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
-                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3.toUpperCase()}]); } }}
+                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
                 ;
 
 proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
                 | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$4}; }}
                 |
                 ;
-func_decl       : id formal_params COLON id SEMI block  {{ $$ = {node:'func_decl',id:$2,fparams:$2,type:$4.toUpperCase(),block:$6}; }}
-                | id               COLON id SEMI block  {{ $$ = {node:'func_decl',id:$2,fparams:[],type:$4.toUpperCase(),block:$6}; }}
+func_decl       : id formal_params COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6}; }}
+                | id               COLON id SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$4,block:$6}; }}
                 |
                 ;
 formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}
@@ -172,10 +172,10 @@ fp_sections     : fp_sections SEMI fp_section           {{ $$ = $1.concat($3); }
 /* fp_section is plural (array) */
 fp_section      : ids COLON id                          {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
-                                                             $$ = $$.concat([{node:'param',id:$1[i],type:$3.toUpperCase(),var:false}]); } }}
+                                                             $$ = $$.concat([{node:'param',id:$1[i],type:$3,var:false}]); } }}
                 | VAR ids COLON id                      {{ $$ = [];
                                                            for(var i=0; i < $2.length; i++) {
-                                                             $$ = $$.concat([{node:'param',id:$2[i],type:$4.toUpperCase(),var:true}]); } }}
+                                                             $$ = $$.concat([{node:'param',id:$2[i],type:$4,var:true}]); } }}
                 ;
 
 cstmt           : BEGIN stmts END                       {{ $$ = $2; }}
@@ -231,6 +231,7 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                 | expr GEQ expr                         {{ $$ = {node:'expr_binop',op:'geq',left:$1,right:$3}; }}
                 | expr LEQ expr                         {{ $$ = {node:'expr_binop',op:'leq',left:$1,right:$3}; }}
                 | expr NEQ expr                         {{ $$ = {node:'expr_binop',op:'neq',left:$1,right:$3}; }}
+                | lvalue call_params                    {{ $$ = {node:'expr_call',id:$1.id,call_params:$2}; }}
                 ;
 
 call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
@@ -242,5 +243,5 @@ lvalue          : id                                    {{ $$ = {node:'variable'
 ids             : ids COMMA id                          {{ $$ = $1.concat([$3]); }}
                 | id                                    {{ $$ = [$1]; }}
                 ;
-id              : ID                                    {{ $$ = yytext; }}
+id              : ID                                    {{ $$ = yytext.toUpperCase(); }}
                 ;
