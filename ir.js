@@ -126,11 +126,14 @@ function IR(theAST) {
   }
 
   function toIR(astTree, level, fnames) {
-    var ast = astTree || theAST,
+    var ast = (typeof astTree === 'undefined') ? theAST : astTree,
         indent = "",
-        node = ast.node,
-        fname,
+        fname, node,
         ir = [];
+    if (! ast) {
+      throw new Error("Warning: toIR called with empty/null AST");
+    }
+    node = ast.node,
     level = level ? level : 0;
     fnames = fnames ? fnames : ['main'];
     fname = fnames[fnames.length-1];
@@ -176,13 +179,17 @@ function IR(theAST) {
         for (var i=0; i < fparams.length; i++) {
           var fparam = fparams[i],
               pname = "%" + new_name(fparam.id + "_fparam"),
+              sname = "%" + new_name(fparam.id + "_fparam_stack"),
               lltype = type_to_lltype(fparam.type);
-          st.insert(fparam.id,{node:'var_decl',type:fparam.type,pname:pname,var:fparam.var,level:level});
           if (fparam.var) {
-            param_list.push(lltype + '* ' + pname);
+            vdecl_ir.push('  ' + pname + ' = load ' + lltype + '* ' + sname);
+            param_list.push(lltype + '* ' + sname);
           } else {
+            vdecl_ir.push('  ' + sname + ' = alloca ' + lltype);
+            vdecl_ir.push('  store ' + lltype + ' ' + pname + ', ' + lltype + '* ' + sname);
             param_list.push(lltype + ' ' + pname);
           }
+          st.insert(fparam.id,{node:'var_decl',type:fparam.type,pname:pname,sname:sname,var:fparam.var,level:level});
         }
         // Evaluate the children. We might need to modify the
         // param-list based on internal variables that refer to higher
@@ -203,9 +210,9 @@ function IR(theAST) {
         for (var i=0; i < lparams.length; i++) {
           var lparam = lparams[i],
               ldecl = st.lookup(lparam.id),
-              pname = ldecl.pname,
+              sname = ldecl.sname,
               lltype = type_to_lltype(ldecl.type);
-            lparam_list.push(lltype + '* ' + pname);
+            lparam_list.push(lltype + '* ' + sname);
         }
         param_list = lparam_list.concat(param_list);
 
@@ -216,6 +223,7 @@ function IR(theAST) {
         ir.push('');
         ir.push('define ' + pitype + ' @' + pdecl.name + '(' + param_list.join(", ") +') {');
         ir.push('entry:');
+        // For functions, add the return parameter
         if (pdecl.ireturn) {
           ir.push('  %retval = alloca ' + pitype);
         }
@@ -262,6 +270,7 @@ function IR(theAST) {
         var lvalue = ast.lvalue,
             expr = ast.expr
             lltype = null;
+        ir.push('  ; ASSIGN start');
         ir.push.apply(ir,toIR(expr,level,fnames));
         if (lvalue.id === fname) {
           // This is actually a function name being used to set the
@@ -280,7 +289,8 @@ function IR(theAST) {
         }
         ast.itype = lvalue.itype;
         ast.istack = lvalue.istack;
-        ast.ilocal = lvalue.ilocal;
+        ast.ilocal = expr.ilocal;
+        ir.push('  ; ASSIGN finish');
         break;
 
       case 'stmt_call':
@@ -400,10 +410,14 @@ function IR(theAST) {
             br_done = br_name + '_done';
         ir.push('  br ' + expr.itype + ' ' + expr.ilocal + ', label %' + br_true + ', label %' + br_false);
         ir.push('  ' + br_true + ':');
-        ir.push.apply(ir, toIR(tstmt,level,fnames));
+        if (tstmt) {
+          ir.push.apply(ir, toIR(tstmt,level,fnames));
+        }
         ir.push('  br label %' + br_done); 
         ir.push('  ' + br_false + ':');
-        ir.push.apply(ir, toIR(fstmt,level,fnames));
+        if (fstmt) {
+          ir.push.apply(ir, toIR(fstmt,level,fnames));
+        }
         ir.push('  br label %' + br_done); 
         ir.push('  ' + br_done + ':');
         ir.push('  ; if statement finish');
@@ -532,8 +546,13 @@ function IR(theAST) {
         ir.push.apply(ir, toIR(right,level,fnames));
         // TODO: real typechecking comparison
         lltype = type_to_lltype(left.type);
-        rtype = left.type;
-        ritype = lltype;
+        if (ast.op in {'gt':1,'lt':1,'eq':1,'geq':1,'leq':1,'neq':1}) {
+          rtype={node:'type',name:'BOOLEAN'};
+          ritype = 'i1';
+        } else {
+          rtype = left.type;
+          ritype = lltype;
+        }
         switch (ast.op) {
           case 'plus':  op = 'add'; break;
           case 'minus': op = 'sub'; break;
@@ -545,12 +564,12 @@ function IR(theAST) {
           case 'and':   op = 'and'; break;
           case 'or':    op = 'or'; break;
 
-          case 'gt':    op = 'icmp sgt'; ritype = 'i1'; break;
-          case 'lt':    op = 'icmp slt'; ritype = 'i1'; break;
-          case 'eq':    op = 'icmp eq'; ritype = 'i1'; break;
-          case 'geq':   op = 'icmp sge'; ritype = 'i1'; break;
-          case 'leq':   op = 'icmp sle'; ritype = 'i1'; break;
-          case 'neq':   op = 'icmp ne'; ritype = 'i1'; break;
+          case 'gt':    op = 'icmp sgt'; break;
+          case 'lt':    op = 'icmp slt'; break;
+          case 'eq':    op = 'icmp eq'; break;
+          case 'geq':   op = 'icmp sge'; break;
+          case 'leq':   op = 'icmp sle'; break;
+          case 'neq':   op = 'icmp ne'; break;
 
           default: throw new Error("Unexpected expr_binop operand " + ast.op);
         }
@@ -642,7 +661,8 @@ function IR(theAST) {
             type = vdecl.type,
             lltype = type_to_lltype(type);
             sname = vdecl.sname,
-            vlevel = vdecl.level;
+            vlevel = vdecl.level,
+            lname = "%" + new_name(id + "_local");
 
         if (vdecl.fparams) {
           // This is actually a function call expression so
@@ -654,45 +674,33 @@ function IR(theAST) {
         }
 
         // Add on any variables from a higher lexical scope first
-        if (level !== vdecl.level) {
+        if (level !== vlevel) {
           // Variable is in higher lexical scope, simulate static
           // link by passing the variable through intervening
           // sub-programs
+          var new_pname, new_sname;
           for(var l = vlevel+1; l <= level; l++) {
             var fname = fnames[l],
-                pname = "%" + new_name(id + "_lparam"),
                 pdecl = st.lookup(fname);
+            new_pname = "%" + new_name(id + "_lparam");
+            new_sname = new_pname + "_stack";
             // replace vdecl and insert it at this level
-            vdecl = {node:'var_decl',type:type,pname:pname,sname:sname,var:true,lparam:true,level:l};
+            vdecl = {node:'var_decl',type:type,pname:new_pname,sname:new_sname,var:true,lparam:true,level:l};
             st.insert(id,vdecl,l);
             // add the variable to the lparams (lexical variables) 
             pdecl.lparams.push({node:'variable',id:id,type:type});
-            ast.ilocal = pname;
-            ast.istack = vdecl.sname;
             st.replace(fname,pdecl);
           }
+          ir.push('  ' + new_pname + ' = load ' + type_to_lltype(type) + '* ' + new_sname + ' ; ' + l);
+          ast.ilocal = new_pname;
+          ast.istack = new_sname;
         }
 
         ast.type = vdecl.type;
         ast.itype = lltype;
-        // Variable in current lexical scope
-        if (vdecl.pname && !vdecl.var) {
-          var sname = "%" + new_name(id + "_stack");
-          ast.ilocal = vdecl.pname;
-          ast.istack = sname;
-          ir.push('  ' + sname + ' = alloca ' + lltype);
-          ir.push('  store ' + lltype + ' ' + vdecl.pname + ', ' + lltype + '* ' + sname);
-        } else {
-          // stack variable or var parameter
-          var lname = "%" + new_name(id + "_local");
-          ast.ilocal = lname;
-          if (vdecl.pname && vdecl.var) {
-            ast.istack = vdecl.pname;
-          } else {
-            ast.istack = vdecl.sname;
-          }
-          ir.push('  ' + lname + ' = load ' + lltype + '* ' + ast.istack);
-        }
+        ast.istack = vdecl.sname;
+        ast.ilocal = lname;
+        ir.push('  ' + ast.ilocal + ' = load ' + lltype + '* ' + ast.istack);
         break;
 
       default:
