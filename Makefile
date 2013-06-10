@@ -5,6 +5,7 @@ TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
 	 func1 ffib \
 	 expr1 \
 	 bool1 \
+	 string1 string2 \
 	 if1 if2 \
 	 nested1 nested2 nested3 \
 	 write1 write2 \

@@ -90,6 +90,7 @@ function IR(theAST) {
       case 'INTEGER': return "i32"; break;
       case 'REAL':    return "float"; break;
       case 'BOOLEAN': return "i1"; break;
+      case 'STRING':  return "i8*"; break;
       case 'ARRAY':
         if (typeof offset === 'undefined') {
           offset = 0;
@@ -285,8 +286,19 @@ function IR(theAST) {
           st.replace(fname,pdecl);
         } else {
           ir.push.apply(ir,toIR(lvalue,level,fnames));
-          ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
+          if (expr.type.name === 'STRING' && expr.val) {
+            // string literal being assigned so coerce
+            var decay = '%' + new_name('arraydecay');
+            ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
+            ir.push('  store i8* ' + decay + ', ' + lvalue.itype + '* ' + lvalue.istack);
+          } else {
+            ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
+          }
         }
+        if (lvalue.type.name !== expr.type.name) {
+          throw new Error("Type of lvalue and expression do not match");
+        }
+
         ast.itype = lvalue.itype;
         ast.istack = lvalue.istack;
         ast.ilocal = expr.ilocal;
@@ -648,6 +660,7 @@ function IR(theAST) {
         ir.push([sname + ' = private constant [' + slen + ' x i8] c"' + sval + '\\00"']);
         ast.itype = '[' + slen + ' x i8]*';
         ast.ilocal = sname;
+        ast.istack = sname;
         ast.iref = sname;
         break;
       case 'boolean':
