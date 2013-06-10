@@ -127,10 +127,10 @@ WHITESPACE              \s+
 /* operator associations and precedence */
 
 %right          "THEN" "ELSE"
-%nonassoc       "EQ" "NEQ" "GT" "LT" "GEQ" "LEQ" "IN"
+%left           "EQ" "NEQ" "GT" "LT" "GEQ" "LEQ" "IN"
 %left           "PLUS" "MINUS" "OR" "XOR"
 %left           "STAR" "SLASH" "MOD" "DIV" "AND" "SHL" "SHR"
-%nonassoc       "NOT"
+%left           "NOT"
 %left           "UMINUS"          
 
 %start program
@@ -178,10 +178,8 @@ type            : id                                    {{ $$ = {node:'type',nam
 //                | CARET id                              {{ }}
                 ;
 structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:$3,type:$6}; }}
-//                | ARRAY                       OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:[{node:'subrange',start:0,end:null}],type:$3}; }}
-//                | RECORD r_sections END                 {{ }}
-//                | RECORD r_sections SEMI variant END    {{ }}
-//                | RECORD variant END                    {{ }}
+                | RECORD rec_sections END               {{ $$ = {node:'type',name:'RECORD',sections:$2}; }}
+                | RECORD rec_sections SEMI END          {{ $$ = {node:'type',name:'RECORD',sections:$2}; }}
 //                | SET OF ordinal_type                   {{ }}
 //                | FILE OF type                          {{ }}
                 ;
@@ -194,10 +192,19 @@ ordinal_type    : subrange_type                         {{ $$ = $1; }}
                 ;
 subrange_type   : INTEGER_LITERAL DOT DOT INTEGER_LITERAL {{ $$ = {node:'subrange',start:parseInt($1),end:parseInt($4)}; }}
                 ;
+rec_sections    : rec_sections SEMI rec_section         {{ $$ = $1.concat($3); }}
+                |                   rec_section         {{ $$ = $1; }}
+                ;
+/* rec_section is plural */
+rec_section     : ids COLON type                        {{ $$ = [];
+                                                           for(var i=0; i < $1.length; i++) {
+                                                             $$ = $$.concat([{node:'component',id:$1[i],type:$3}]); } }}
+                ;
 
 var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
                 |                var_decl               {{ $$ = $1; }}
                 ;
+/* var_decl is plural */
 var_decl        : ids COLON type                        {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
                                                              $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
@@ -299,7 +306,7 @@ call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
 
 lvalue          : id                                    {{ $$ = {node:'variable',id:$1}; }}
                 | lvalue LBRACK exprs RBRACK            {{ $$ = {node:'expr_array_deref',lvalue:$1,exprs:$3}; }}
-//                | lvalue DOT id                         {{ $$ = {node:'expr_record_deref',lvalue:$1,component:$3}; }}
+                | lvalue DOT id                         {{ $$ = {node:'expr_record_deref',lvalue:$1,component:$3}; }}
                 ;
 ids             : ids COMMA id                          {{ $$ = $1.concat([$3]); }}
                 | id                                    {{ $$ = [$1]; }}

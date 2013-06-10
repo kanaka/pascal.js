@@ -639,7 +639,7 @@ function IR(theAST) {
         break;
 
       case 'expr_array_deref':
-        // TODO: support multi-level arrays
+        // TODO: support arrays of arrays
         var lvalue = ast.lvalue,
             adecl = st.lookup(lvalue.id),
             exprs = ast.exprs;
