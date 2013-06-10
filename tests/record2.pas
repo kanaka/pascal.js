@@ -1,22 +1,22 @@
 program Sample;
 
 type
-    R1 = record
-           A : Integer;
-           B : Integer;
-           C : Array [1..10] of Integer;
-         end;
+    RType = record
+      A : Integer;
+      B : Integer;
+      C : record
+        D : Integer;
+        E : Integer;
+      end;
+    end;
 var
-    X : R1;
-    Y : Array [1..3] of R1;
+    X : RType;
 
 begin
     X.A := 1;
     X.B := 2;
-    X.C[1] := 3;
-    Y[1].A := 4;
-    Y[1].B := 5;
-    Y[2].C[3] := 6;
-    WriteLn('X.B = ', X.B);
-    WriteLn('Y[2].C[3] = ', Y[2].C[3]);
+    X.C.D := 3;
+    X.C.E := 4;
+    WriteLn('X.A = ', X.A, ', X.B = ', X.B);
+    WriteLn('X.C.D = ', X.C.D, ', X.C.E = ', X.C.E);
 end.

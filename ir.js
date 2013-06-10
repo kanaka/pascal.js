@@ -94,15 +94,11 @@ function IR(theAST) {
       var tdecl = st.lookup(t.id);
       t = tdecl.type;
     }
-    // Copy up the type data
-    type.name = t.name;
-    if (t.type) { type.type = t.type; }
-    if (t.indexes) { type.indexes = t.indexes; }
     switch (t.name) {
-      case 'INTEGER': type.lltype = "i32"; break;
-      case 'REAL':    type.lltype = "float"; break;
-      case 'BOOLEAN': type.lltype = "i1"; break;
-      case 'STRING':  type.lltype = "i8*"; break;
+      case 'INTEGER': t.lltype = "i32"; break;
+      case 'REAL':    t.lltype = "float"; break;
+      case 'BOOLEAN': t.lltype = "i1"; break;
+      case 'STRING':  t.lltype = "i8*"; break;
       case 'ARRAY':
         if (typeof offset === 'undefined') {
           offset = 0;
@@ -118,10 +114,28 @@ function IR(theAST) {
         for (var i=offset; i<indexes.length; i++) {
           res = res + ']';
         }
-        type.lltype = res;
+        t.lltype = res;
         break;
-      default: throw new Error("TODO: handle " + type.name + " type");
+      case 'RECORD':
+        var comps = [],
+            sections = t.sections;
+        t.component_map = {};
+        for (var i=0; i<sections.length; i++) {
+          var comp = sections[i];
+          comps.push(annotate_type(comp.type).lltype);
+          t.component_map[comp.id] = i;
+        }
+        t.lltype = "{" + comps.join(", ") + "}";
+        break;
+      default: throw new Error("TODO: handle " + t.name + " type");
     }
+    // Copy up the type data
+    type.name = t.name;
+    if (t.type) { type.type = t.type; }
+    if (t.lltype) { type.lltype = t.lltype; }
+    if (t.indexes) { type.indexes = t.indexes; }
+    if (t.sections) { type.sections = t.sections; }
+    if (t.component_map) { type.component_map = t.component_map; }
     return type;
   }
 
@@ -670,6 +684,31 @@ function IR(theAST) {
         ast.itype = atype.lltype;
         ast.istack = aoff;
         ast.ilocal = aval;
+        break;
+
+      case 'expr_record_deref':
+        var lvalue = ast.lvalue,
+            comp = ast.component;
+        ir.push.apply(ir, toIR(lvalue,level,fnames));
+        var cidx = lvalue.type.component_map[comp],
+            ctype = lvalue.type.sections[cidx].type,
+            clltype = ctype.lltype,
+            cnames = "", rname, roff, rval,
+            lv = lvalue;
+        while (lv.lvalue) {
+          cnames = cnames + "." + lv.component;
+          lv = lv.lvalue;
+        }
+        cnames = lv.id + cnames;
+        rname = '%' + new_name(cnames),
+        roff = rname + '_recordoff',
+        rval = rname + '_arrayval';
+        ir.push('  ' + roff + ' = getelementptr inbounds ' + lvalue.itype + '* ' + lvalue.istack + ', i32 0, i32 ' + cidx);
+        ir.push('  ' + rval + ' = load ' + clltype + '* ' + roff);
+        ast.type = ctype;
+        ast.itype = clltype;
+        ast.istack = roff;
+        ast.ilocal = rval;
         break;
 
       case 'integer':
