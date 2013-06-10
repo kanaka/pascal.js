@@ -138,7 +138,9 @@ WHITESPACE              \s+
 %% /* language grammar */
 
 program         : program_header SEMI block DOT         {{ $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$3};
-                                                           //inspect($$);
+                                                           if (typeof module !== 'undefined' && require.main === module) {
+                                                             console.warn(inspect($$));
+                                                           }
                                                            return $$; }}
                 ;
 program_header  : PROGRAM id                            {{ $$ = {node:'program_heading',id:$2,fparams:[]}; }}
@@ -152,34 +154,36 @@ block           : decls cstmt                           {{ $$ = {node:'block',de
 decls           : decls decl                            {{ $$ = $1.concat($2); }}
                 |       decl                            {{ $$ = $1; }}
                 ;
-decl            : VAR var_decls SEMI                    {{ $$ = $2; }}
+decl            : TYPE type_decls SEMI                  {{ $$ = $2; }}
+                | VAR var_decls SEMI                    {{ $$ = $2; }}
                 | PROCEDURE proc_decl SEMI              {{ $$ = [$2]; }}
                 | FUNCTION func_decl SEMI               {{ $$ = [$2]; }}
                 ;
-var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
-                |                var_decl               {{ $$ = $1; }}
+
+type_decls      : type_decls SEMI type_decl             {{ $$ = $1.concat($3); }}
+                |                 type_decl             {{ $$ = [$1]; }}
                 ;
-var_decl        : ids COLON type                        {{ $$ = [];
-                                                           for(var i=0; i < $1.length; i++) {
-                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
+type_decl       : id EQ type                            {{ $$ = {node:'type_decl',id:$1,type:$3}; }}
                 ;
-type            : INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
+type            : id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
+                | INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
                 | STRING                                {{ $$ = {node:'type',name:'STRING'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
                 /* ordinal types */
 //                | enumerated_type                       {{ }}
 //                | subrange_type                         {{ }}
-                /* structured types */
-                | ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:$3,type:$6}; }}
+                | structured_type                         {{ $$ = $1; }}
+                /* pointer type */
+//                | CARET id                              {{ }}
+                ;
+structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:$3,type:$6}; }}
 //                | ARRAY                       OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:[{node:'subrange',start:0,end:null}],type:$3}; }}
 //                | RECORD r_sections END                 {{ }}
 //                | RECORD r_sections SEMI variant END    {{ }}
 //                | RECORD variant END                    {{ }}
 //                | SET OF ordinal_type                   {{ }}
 //                | FILE OF type                          {{ }}
-                /* pointer type */
-//                | CARET id                              {{ }}
                 ;
 indexes         : indexes COMMA ordinal_type            {{ $$ = $1.concat($3); }}
                 | ordinal_type                          {{ $$ = [$1]; }}
@@ -189,6 +193,14 @@ ordinal_type    : subrange_type                         {{ $$ = $1; }}
                 | id
                 ;
 subrange_type   : INTEGER_LITERAL DOT DOT INTEGER_LITERAL {{ $$ = {node:'subrange',start:parseInt($1),end:parseInt($4)}; }}
+                ;
+
+var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }}
+                |                var_decl               {{ $$ = $1; }}
+                ;
+var_decl        : ids COLON type                        {{ $$ = [];
+                                                           for(var i=0; i < $1.length; i++) {
+                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
                 ;
 
 proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
@@ -213,6 +225,7 @@ fp_section      : ids COLON type                        {{ $$ = [];
                                                            for(var i=0; i < $2.length; i++) {
                                                              $$ = $$.concat([{node:'param',id:$2[i],type:$4,var:true}]); } }}
                 ;
+
 
 cstmt           : BEGIN stmts END                       {{ $$ = $2; }}
                 | BEGIN stmts SEMI END                  {{ $$ = $2; }}

@@ -1,17 +1,19 @@
 TESTDIR ?= tests
 BUILDDIR ?= build
 
-TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
-	 func1 ffib \
+TESTS ?= write1 write2 \
 	 expr1 \
 	 bool1 \
+	 type1 type2 type3 \
+	 proc1 proc2 proc3 proc4 proc5 pfib \
+	 func1 ffib \
 	 string1 string2 \
 	 if1 if2 \
 	 nested1 nested2 nested3 \
-	 write1 write2 \
 	 for1 for2 \
-	 array1 array2 array3 \
-	 book9-4
+	 array1 array2 array3 array4 array5 \
+	 book9-4 \
+	 qsort
 
 all: parse.js
 

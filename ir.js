@@ -85,32 +85,46 @@ function IR(theAST) {
     return name + "_" + (name_cnt++) + "_";
   }
 
-  function type_to_lltype(type,offset) {
-    switch (type.name) {
-      case 'INTEGER': return "i32"; break;
-      case 'REAL':    return "float"; break;
-      case 'BOOLEAN': return "i1"; break;
-      case 'STRING':  return "i8*"; break;
+  // Resolve a type definition to add lltype containing LLVM type
+  // string. If the type is a named type then it will be resolved to
+  // a base type first.
+  function annotate_type(type,offset) {
+    var t = type;
+    while (t.name === 'NAMED') {
+      var tdecl = st.lookup(t.id);
+      t = tdecl.type;
+    }
+    // Copy up the type data
+    type.name = t.name;
+    if (t.type) { type.type = t.type; }
+    if (t.indexes) { type.indexes = t.indexes; }
+    switch (t.name) {
+      case 'INTEGER': type.lltype = "i32"; break;
+      case 'REAL':    type.lltype = "float"; break;
+      case 'BOOLEAN': type.lltype = "i1"; break;
+      case 'STRING':  type.lltype = "i8*"; break;
       case 'ARRAY':
         if (typeof offset === 'undefined') {
           offset = 0;
         }
         var res = "",
-            indexes = type.indexes;
+            indexes = t.indexes;
         for (var i=offset; i<indexes.length; i++) {
           var start = indexes[i].start,
               end = indexes[i].end;
           res = res + '[' + (end-start+1) + ' x ';
         }
-        res = res + type_to_lltype(type.type);
+        res = res + annotate_type(t.type).lltype;
         for (var i=offset; i<indexes.length; i++) {
           res = res + ']';
         }
-        return res;
+        type.lltype = res;
         break;
       default: throw new Error("TODO: handle " + type.name + " type");
     }
+    return type;
   }
+
 
   // normalizeIR takes a JSON IR
   function normalizeIR(ir) {
@@ -179,9 +193,10 @@ function IR(theAST) {
         // Regular formal parameters
         for (var i=0; i < fparams.length; i++) {
           var fparam = fparams[i],
+              ftype = annotate_type(fparam.type),
+              lltype = ftype.lltype,
               pname = "%" + new_name(fparam.id + "_fparam"),
-              sname = "%" + new_name(fparam.id + "_fparam_stack"),
-              lltype = type_to_lltype(fparam.type);
+              sname = "%" + new_name(fparam.id + "_fparam_stack");
           if (fparam.var) {
             vdecl_ir.push('  ' + pname + ' = load ' + lltype + '* ' + sname);
             param_list.push(lltype + '* ' + sname);
@@ -190,7 +205,7 @@ function IR(theAST) {
             vdecl_ir.push('  store ' + lltype + ' ' + pname + ', ' + lltype + '* ' + sname);
             param_list.push(lltype + ' ' + pname);
           }
-          st.insert(fparam.id,{node:'var_decl',type:fparam.type,pname:pname,sname:sname,var:fparam.var,level:level});
+          st.insert(fparam.id,{node:'var_decl',type:ftype,pname:pname,sname:sname,var:fparam.var,level:level});
         }
         // Evaluate the children. We might need to modify the
         // param-list based on internal variables that refer to higher
@@ -212,7 +227,8 @@ function IR(theAST) {
           var lparam = lparams[i],
               ldecl = st.lookup(lparam.id),
               sname = ldecl.sname,
-              lltype = type_to_lltype(ldecl.type);
+              ltype = annotate_type(ldecl.type),
+              lltype = ltype.lltype;
             lparam_list.push(lltype + '* ' + sname);
         }
         param_list = lparam_list.concat(param_list);
@@ -241,15 +257,23 @@ function IR(theAST) {
         ir.push('}');
         break;
 
+      case 'type_decl':
+        var id = ast.id,
+            type = ast.type;
+        if (type.name === 'NAMED') {
+          st.lookup(type.id); // verify the reference type exists
+        }
+        st.insert(ast.id,{node:'type_decl',id:id,type:type});
+        break;
+
       case 'var_decl':
         var id = ast.id,
-            type = ast.type,
+            vtype = annotate_type(ast.type),
             pdecl = st.lookup(fname),
             sname = "%" + new_name(id + "_stack");
 
-        lltype = type_to_lltype(type),
-        st.insert(id,{node:'var_decl',type:type,sname:sname,level:pdecl.level});
-        ir.push('  ' + sname + ' = alloca ' + lltype);
+        st.insert(id,{node:'var_decl',type:vtype,sname:sname,level:pdecl.level});
+        ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
         break;
 
       case 'proc_decl':
@@ -279,7 +303,8 @@ function IR(theAST) {
           // lvalue
           var pdecl = st.lookup(fname);
           lvalue.type = pdecl.type;
-          lvalue.itype = type_to_lltype(pdecl.type);
+          ptype = annotate_type(pdecl.type),
+          lvalue.itype = ptype.lltype,
           pdecl.ireturn = true;
           pdecl.itype = lvalue.itype;
           ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + pdecl.itype + '* %retval');
@@ -296,7 +321,7 @@ function IR(theAST) {
           }
         }
         if (lvalue.type.name !== expr.type.name) {
-          throw new Error("Type of lvalue and expression do not match");
+          throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
         }
 
         ast.itype = lvalue.itype;
@@ -375,10 +400,10 @@ function IR(theAST) {
                 param_list = [];
             for(var i=0; i < lparams.length; i++) {
               var lparam = lparams[i],
-                  litype = null;
+                  lltype = null;
               ir.push.apply(ir, toIR(lparam,level,fnames));
-              litype = type_to_lltype(lparam.type);
-              param_list.push(litype + "* " + lparam.istack);
+              ltype = annotate_type(lparam.type),
+              param_list.push(ltype.lltype + "* " + lparam.istack);
             }
             for(var i=0; i < cparams.length; i++) {
               var cparam = cparams[i];
@@ -392,10 +417,11 @@ function IR(theAST) {
             }
             if (node === 'expr_call') {
               var ret = '%' + new_name(pdecl.name + "_ret"),
-                pitype = type_to_lltype(pdecl.type);
-              ir.push('  ' + ret + ' = call ' + pitype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
+                ptype = annotate_type(pdecl.type),
+                lltype = ptype.lltype;
+              ir.push('  ' + ret + ' = call ' + lltype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
               ast.type = pdecl.type;
-              ast.itype = pitype;
+              ast.itype = lltype;
               ast.ilocal = ret;
             } else {
               ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
@@ -550,20 +576,21 @@ function IR(theAST) {
         break;
 
       case 'expr_binop':
-        var left = ast.left,
-            right = ast.right,
+        var left = ast.left, ltype,
+            right = ast.right, rtype,
             dest_name = '%' + new_name("binop"),
-            lltype, rtype, ritype, op;
+            rtype, ritype, op;
         ir.push.apply(ir, toIR(left,level,fnames));
         ir.push.apply(ir, toIR(right,level,fnames));
         // TODO: real typechecking comparison
-        lltype = type_to_lltype(left.type);
+        ltype = annotate_type(left.type);
+        rtype = annotate_type(right.type);
         if (ast.op in {'gt':1,'lt':1,'eq':1,'geq':1,'leq':1,'neq':1}) {
           rtype={node:'type',name:'BOOLEAN'};
           ritype = 'i1';
         } else {
           rtype = left.type;
-          ritype = lltype;
+          ritype = ltype.lltype;
         }
         switch (ast.op) {
           case 'plus':  op = 'add'; break;
@@ -585,7 +612,7 @@ function IR(theAST) {
 
           default: throw new Error("Unexpected expr_binop operand " + ast.op);
         }
-        ir.push('  ' + dest_name + ' = ' + op + ' ' + lltype + ' ' + left.ilocal + ', ' + right.ilocal);
+        ir.push('  ' + dest_name + ' = ' + op + ' ' + ltype.lltype + ' ' + left.ilocal + ', ' + right.ilocal);
         ast.type = rtype;
         ast.itype = ritype;
         ast.ilocal = dest_name;
@@ -622,25 +649,25 @@ function IR(theAST) {
             end = indexes[0].end,
             aval = '%' + new_name(lvalue.id + '_arrayval'),
             aidx, aoff,
-            lltype = type_to_lltype(adecl.type.type);
+            atype = annotate_type(adecl.type.type);
         if (exprs.length !== indexes.length) {
           throw new Error('Array dimension mismatch for ' + lvalue.id);
         }
         var illstack = lvalue.istack;
         for (var i=0; i < exprs.length; i++) {
           var expr = exprs[i]
-              illtype = type_to_lltype(lvalue.type,i);
+              ltype = annotate_type(lvalue.type,i);
           aidx = '%' + new_name(lvalue.id + '_arrayidx');
           aoff = '%' + new_name(lvalue.id + '_arrayoff');
           ir.push.apply(ir, toIR(expr,level,fnames));
           // TODO: generate index checks and assertion errors
           ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
-          ir.push('  ' + aoff + ' = getelementptr inbounds ' + illtype + '* ' + illstack + ', i32 0, ' + expr.itype + ' ' + aidx);
+          ir.push('  ' + aoff + ' = getelementptr inbounds ' + ltype.lltype + '* ' + illstack + ', i32 0, ' + expr.itype + ' ' + aidx);
           illstack = aoff;
         }
-        ir.push('  ' + aval + ' = load ' + lltype + '* ' + aoff);
+        ir.push('  ' + aval + ' = load ' + atype.lltype + '* ' + aoff);
         ast.type = adecl.type.type;
-        ast.itype = lltype;
+        ast.itype = atype.lltype;
         ast.istack = aoff;
         ast.ilocal = aval;
         break;
@@ -671,8 +698,7 @@ function IR(theAST) {
       case 'variable':
         var id = ast.id,
             vdecl = st.lookup(ast.id),
-            type = vdecl.type,
-            lltype = type_to_lltype(type);
+            vtype = annotate_type(vdecl.type),
             sname = vdecl.sname,
             vlevel = vdecl.level,
             lname = "%" + new_name(id + "_local");
@@ -698,22 +724,22 @@ function IR(theAST) {
             new_pname = "%" + new_name(id + "_lparam");
             new_sname = new_pname + "_stack";
             // replace vdecl and insert it at this level
-            vdecl = {node:'var_decl',type:type,pname:new_pname,sname:new_sname,var:true,lparam:true,level:l};
+            vdecl = {node:'var_decl',type:vtype,pname:new_pname,sname:new_sname,var:true,lparam:true,level:l};
             st.insert(id,vdecl,l);
             // add the variable to the lparams (lexical variables) 
-            pdecl.lparams.push({node:'variable',id:id,type:type});
+            pdecl.lparams.push({node:'variable',id:id,type:vtype});
             st.replace(fname,pdecl);
           }
-          ir.push('  ' + new_pname + ' = load ' + type_to_lltype(type) + '* ' + new_sname + ' ; ' + l);
+          ir.push('  ' + new_pname + ' = load ' + vtype.lltype + '* ' + new_sname + ' ; ' + l);
           ast.ilocal = new_pname;
           ast.istack = new_sname;
         }
 
-        ast.type = vdecl.type;
-        ast.itype = lltype;
+        ast.type = vtype;
+        ast.itype = vtype.lltype;
         ast.istack = vdecl.sname;
         ast.ilocal = lname;
-        ir.push('  ' + ast.ilocal + ' = load ' + lltype + '* ' + ast.istack);
+        ir.push('  ' + ast.ilocal + ' = load ' + vtype.lltype + '* ' + ast.istack);
         break;
 
       default:
