@@ -13,6 +13,17 @@ TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
 	 array1 array2 array3 \
 	 book9-4
 
+all: parse.js
+
+parse.js: parse.jison
+	jison parse.jison
+
+clean:
+	rm $(BUILDDIR)/*
+
+
+TEST_DEPS = ir.js parse.js
+
 FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%)
 LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.ll)
 FPC_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out1)
@@ -20,16 +31,10 @@ LL_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out2)
 
 DIFFS=$(TESTS:%=$(BUILDDIR)/%.diff)
 
-all:
-	jison parse.jison
-
-clean:
-	rm $(BUILDDIR)/*
-
-$(FPC_OBJECTS): $(BUILDDIR)/%: $(TESTDIR)/%.pas
+$(FPC_OBJECTS): $(BUILDDIR)/%: $(TESTDIR)/%.pas $(TEST_DEPS)
 	fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"; \
 
-$(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas
+$(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas $(TEST_DEPS)
 	node ir.js $< > $@
 
 $(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
