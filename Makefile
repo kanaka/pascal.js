@@ -9,7 +9,7 @@ TESTS ?= proc1 proc2 proc3 proc4 proc5 pfib \
 	 nested1 nested2 nested3 \
 	 write1 write2 \
 	 for1 for2 \
-	 array1 array2 \
+	 array1 array2 array3 \
 	 book9-4
 
 FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%)
