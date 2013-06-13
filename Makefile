@@ -11,8 +11,8 @@ TESTS ?= write1 write2 \
 	 if1 if2 \
 	 nested1 nested2 nested3 \
 	 for1 for2 \
-	 array1 array2 array3 array4 array5 \
-	 record1 record2 record3 \
+	 array1 array2 array4 array5 array6 array7 \
+	 record1 record2 record3 record4 \
 	 book9-4 \
 	 qsort
 

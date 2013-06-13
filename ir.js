@@ -88,7 +88,7 @@ function IR(theAST) {
   // Resolve a type definition to add lltype containing LLVM type
   // string. If the type is a named type then it will be resolved to
   // a base type first.
-  function annotate_type(type,offset) {
+  function annotate_type(type) {
     var t = type;
     while (t.name === 'NAMED') {
       var tdecl = st.lookup(t.id);
@@ -100,21 +100,10 @@ function IR(theAST) {
       case 'BOOLEAN': t.lltype = "i1"; break;
       case 'STRING':  t.lltype = "i8*"; break;
       case 'ARRAY':
-        if (typeof offset === 'undefined') {
-          offset = 0;
-        }
-        var res = "",
-            indexes = t.indexes;
-        for (var i=offset; i<indexes.length; i++) {
-          var start = indexes[i].start,
-              end = indexes[i].end;
-          res = res + '[' + (end-start+1) + ' x ';
-        }
-        res = res + annotate_type(t.type).lltype;
-        for (var i=offset; i<indexes.length; i++) {
-          res = res + ']';
-        }
-        t.lltype = res;
+        var index = t.index,
+            start = index.start,
+            end = index.end;
+        t.lltype = '[' + (end-start+1) + ' x ' + annotate_type(t.type).lltype + ']';
         break;
       case 'RECORD':
         var comps = [],
@@ -131,12 +120,31 @@ function IR(theAST) {
     }
     // Copy up the type data
     type.name = t.name;
-    if (t.type) { type.type = t.type; }
-    if (t.lltype) { type.lltype = t.lltype; }
-    if (t.indexes) { type.indexes = t.indexes; }
-    if (t.sections) { type.sections = t.sections; }
-    if (t.component_map) { type.component_map = t.component_map; }
+    var keys = ['type', 'lltype', 'index', 'sections', 'component_map'];
+    for (var i=0; i < keys.length; i++) {
+      var k = keys[i];
+      if (typeof t[k] !== 'undefined' && typeof type[k] === 'undefined') {
+          type[k] = t[k];
+      }
+    }
     return type;
+  }
+
+  function deref_name(lvalue) {
+    var id = null,
+        lv = lvalue,
+        cnames = "";
+    do {
+      if (lv.node === 'expr_record_deref') {
+        cnames = "." + lv.component + cnames ;
+      } else if (lv.node === 'expr_array_deref') {
+        cnames = "_sub" + cnames;
+      } else {
+        cnames = lv.id + cnames;
+      }
+      lv = lv.lvalue;
+    } while (lv);
+    return cnames;
   }
 
 
@@ -334,6 +342,7 @@ function IR(theAST) {
             ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
           }
         }
+        
         if (lvalue.type.name !== expr.type.name) {
           throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
         }
@@ -653,35 +662,22 @@ function IR(theAST) {
         break;
 
       case 'expr_array_deref':
-        // TODO: support arrays of arrays
         var lvalue = ast.lvalue,
-            adecl = st.lookup(lvalue.id),
-            exprs = ast.exprs;
+            expr = ast.expr;
+        ir.push.apply(ir, toIR(expr,level,fnames));
         ir.push.apply(ir, toIR(lvalue,level,fnames));
-        var indexes = lvalue.type.indexes,
-            start = indexes[0].start,
-            end = indexes[0].end,
-            aval = '%' + new_name(lvalue.id + '_arrayval'),
-            aidx, aoff,
-            atype = annotate_type(adecl.type.type);
-        if (exprs.length !== indexes.length) {
-          throw new Error('Array dimension mismatch for ' + lvalue.id);
-        }
-        var illstack = lvalue.istack;
-        for (var i=0; i < exprs.length; i++) {
-          var expr = exprs[i]
-              ltype = annotate_type(lvalue.type,i);
-          aidx = '%' + new_name(lvalue.id + '_arrayidx');
-          aoff = '%' + new_name(lvalue.id + '_arrayoff');
-          ir.push.apply(ir, toIR(expr,level,fnames));
-          // TODO: generate index checks and assertion errors
-          ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
-          ir.push('  ' + aoff + ' = getelementptr inbounds ' + ltype.lltype + '* ' + illstack + ', i32 0, ' + expr.itype + ' ' + aidx);
-          illstack = aoff;
-        }
-        ir.push('  ' + aval + ' = load ' + atype.lltype + '* ' + aoff);
-        ast.type = adecl.type.type;
-        ast.itype = atype.lltype;
+
+        var atype = lvalue.type,
+            start = atype.index.start,
+            aname = '%' + new_name(deref_name(ast)),
+            aidx = aname + 'idx',
+            aoff = aname + 'off',
+            aval = aname + 'val';
+        ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
+        ir.push('  ' + aoff + ' = getelementptr inbounds ' + atype.lltype + '* ' + lvalue.istack + ', i32 0, ' + expr.itype + ' ' + aidx);
+        ir.push('  ' + aval + ' = load ' + atype.type.lltype + '* ' + aoff);
+        ast.type = atype.type;
+        ast.itype = atype.type.lltype;
         ast.istack = aoff;
         ast.ilocal = aval;
         break;
@@ -693,16 +689,9 @@ function IR(theAST) {
         var cidx = lvalue.type.component_map[comp],
             ctype = lvalue.type.sections[cidx].type,
             clltype = ctype.lltype,
-            cnames = "", rname, roff, rval,
-            lv = lvalue;
-        while (lv.lvalue) {
-          cnames = cnames + "." + lv.component;
-          lv = lv.lvalue;
-        }
-        cnames = lv.id + cnames;
-        rname = '%' + new_name(cnames),
-        roff = rname + '_recordoff',
-        rval = rname + '_arrayval';
+            rname = '%' + new_name(deref_name(ast)),
+            roff = rname + '_off',
+            rval = rname + '_val';
         ir.push('  ' + roff + ' = getelementptr inbounds ' + lvalue.itype + '* ' + lvalue.istack + ', i32 0, i32 ' + cidx);
         ir.push('  ' + rval + ' = load ' + clltype + '* ' + roff);
         ast.type = ctype;

@@ -177,7 +177,9 @@ type            : id                                    {{ $$ = {node:'type',nam
                 /* pointer type */
 //                | CARET id                              {{ }}
                 ;
-structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = {node:'type',name:'ARRAY',indexes:$3,type:$6}; }}
+structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = $6;
+                                                           for(var i=$3.length-1; i >= 0; i--) {
+                                                             $$ = {node:'type',name:'ARRAY',type:$$,index:$3[i]}; } }}
                 | RECORD rec_sections END               {{ $$ = {node:'type',name:'RECORD',sections:$2}; }}
                 | RECORD rec_sections SEMI END          {{ $$ = {node:'type',name:'RECORD',sections:$2}; }}
 //                | SET OF ordinal_type                   {{ }}
@@ -305,7 +307,9 @@ call_params     : LPAREN exprs RPAREN                   {{ $$ = $2; }}
                 ;
 
 lvalue          : id                                    {{ $$ = {node:'variable',id:$1}; }}
-                | lvalue LBRACK exprs RBRACK            {{ $$ = {node:'expr_array_deref',lvalue:$1,exprs:$3}; }}
+                | lvalue LBRACK exprs RBRACK            {{ $$ = $1;
+                                                           for(var i=0; i < $3.length; i++) {
+                                                             $$ = {node:'expr_array_deref',lvalue:$$,expr:$3[i]} } }} 
                 | lvalue DOT id                         {{ $$ = {node:'expr_record_deref',lvalue:$1,component:$3}; }}
                 ;
 ids             : ids COMMA id                          {{ $$ = $1.concat([$3]); }}
