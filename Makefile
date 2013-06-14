@@ -2,7 +2,8 @@ TESTDIR ?= tests
 BUILDDIR ?= build
 
 TESTS ?= write1 write2 \
-	 expr1 \
+	 expr1 expr2 \
+	 float1 \
 	 bool1 \
 	 type1 type2 type3 \
 	 proc1 proc2 proc3 proc4 proc5 pfib \
@@ -40,8 +41,9 @@ $(FPC_OBJECTS): $(BUILDDIR)/%: $(TESTDIR)/%.pas $(TEST_DEPS)
 $(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas $(TEST_DEPS)
 	node ir.js $< > $@
 
+# run the fpc executable translating floating point output
 $(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
-	$< > $@
+	$< | sed 's/\(\.[0-9][0-9][0-9][0-9][0-9][0-9]\)[0-9]*\(E[+-]\)0*\([0-9][0-9]\)/\1\2\3/g' > $@
 
 $(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.ll
 	lli $< > $@
@@ -58,7 +60,8 @@ test: test_prefix $(DIFFS)
 	mkdir -p $(BUILDDIR); \
 	pass=""; \
 	fail=""; \
-	for test in $(TESTS); do \
+	tests="$(TESTS)"; \
+	for test in $$tests; do \
 	    diffs=`cat $(BUILDDIR)/$${test}.diff`; \
 	    if [ -z "$${diffs}" ]; then \
 	        pass="$${pass}$${test} "; \
@@ -68,6 +71,6 @@ test: test_prefix $(DIFFS)
 	        fail="$${fail}$${test} "; \
 	    fi; \
 	done; \
-	[ -z "$${fail}" ] && echo "All tests passed"; \
+	echo "RESULT: `echo $$pass | wc -w`/`echo $$tests | wc -w` tests passed"; \
 	[ -n "$${fail}" ] && echo "Failing tests: $${fail}"; \
 	true

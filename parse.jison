@@ -6,7 +6,7 @@
 %s comment
 
 STRING                  "'"[^']*"'"
-REAL                    [0-9]+"."[0-9]*     
+REAL                    [0-9]+"."[0-9]+
 INTEGER                 [0-9]+
 BOOLEAN                 "TRUE"|"FALSE"
 ID                      [A-Za-z_][A-Za-z0-9_]*
@@ -95,9 +95,11 @@ WHITESPACE              \s+
 "REAL"                  return "REAL";
 "STRING"                return "STRING";
 "BOOLEAN"               return "BOOLEAN";
+"CHAR"                  return "CHAR";
+"BYTE"                  return "BYTE";
 
-{INTEGER}               return "INTEGER_LITERAL";
 {REAL}                  return "REAL_LITERAL";
+{INTEGER}               return "INTEGER_LITERAL";
 {STRING}                return "STRING_LITERAL";
 "TRUE"                  return "TRUE_LITERAL";
 "FALSE"                 return "FALSE_LITERAL";
@@ -170,6 +172,8 @@ type            : id                                    {{ $$ = {node:'type',nam
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
                 | STRING                                {{ $$ = {node:'type',name:'STRING'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
+//                | CHAR                                  {{ $$ = {node:'type',name:'CHAR'}; }}
+//                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
                 /* ordinal types */
 //                | enumerated_type                       {{ }}
 //                | subrange_type                         {{ }}

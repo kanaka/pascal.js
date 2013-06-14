@@ -2,7 +2,8 @@
  * Based on https://raw.github.com/zaach/floop.js/master/lib/lljsgen.js @ 4a981a2799
  */
 
-var util = require('util');
+var util = require('util'),
+    ieee754 = require('./ieee754');
 
 function id(identifier) {
   return identifier.split('-').join('_').replace('?', '$');
@@ -85,15 +86,20 @@ function IR(theAST) {
     return name + "_" + (name_cnt++) + "_";
   }
 
-  // Resolve a type definition to add lltype containing LLVM type
-  // string. If the type is a named type then it will be resolved to
-  // a base type first.
-  function annotate_type(type) {
+  function expand_type(type) {
     var t = type;
     while (t.name === 'NAMED') {
       var tdecl = st.lookup(t.id);
       t = tdecl.type;
     }
+    return t;
+  }
+
+  // Resolve a type definition to add lltype containing LLVM type
+  // string. If the type is a named type then it will be resolved to
+  // a base type first.
+  function annotate_type(type) {
+    var t = expand_type(type);
     switch (t.name) {
       case 'INTEGER': t.lltype = "i32"; break;
       case 'REAL':    t.lltype = "float"; break;
@@ -128,6 +134,26 @@ function IR(theAST) {
       }
     }
     return type;
+  }
+
+  function isScalar(type) {
+    var t = expand_type(type);
+    var res = false;
+    switch (t.name) {
+      case 'INTEGER': res = true; break;
+      case 'REAL':    res = true; break;
+      case 'BOOLEAN': res = true; break;
+    }
+    return res;
+  }
+
+  function isString(type) {
+    var t = expand_type(type);
+    return (t.name === 'STRING');
+  }
+
+  function isScalarOrString(type) {
+    return (isScalar(type) || isString(type));
   }
 
   function deref_name(lvalue) {
@@ -194,7 +220,7 @@ function IR(theAST) {
         ir.push('@.false_str = private constant [6 x i8] c"FALSE\\00"');
         ir.push('@.str_format = private constant [3 x i8] c"%s\\00"');
         ir.push('@.int_format = private constant [3 x i8] c"%d\\00"');
-        ir.push('@.float_format = private constant [3 x i8] c"%f\\00"');
+        ir.push('@.float_format = private constant [4 x i8] c"% E\\00"');
         ir.push('');
         block.param_list = [];
         ir.push.apply(ir, toIR(block,level,fnames));
@@ -372,10 +398,18 @@ function IR(theAST) {
             for(var i=0; i < cparams.length; i++) {
               var param = cparams[i],
                   v = vcnt++,
-                  format = null;
+                  format = null,
+                  flen = 3;
               switch (param.type.name) {
                 case 'INTEGER': format = "@.int_format"; break;
-                case 'REAL':    format = "@.float_format"; break;
+                case 'REAL':
+                  var conv = new_name('%conv');
+                  ir.push('  ' + conv + ' = fpext float ' + param.ilocal + ' to double');
+                  format = "@.float_format";
+                  flen = 4;
+                  param.itype = "double";
+                  param.ilocal = conv;
+                  break;
                 case 'STRING':  format = "@.str_format"; break;
                 case 'BOOLEAN':
                   var br_name = new_name('br'),
@@ -401,7 +435,7 @@ function IR(theAST) {
                 default:
                   throw new Error("Unknown WRITE type: " + param.type.name);
               }
-              ir.push('  %str' + v + ' = getelementptr inbounds [3 x i8]* ' + format + ', i32 0, i32 0');
+              ir.push('  %str' + v + ' = getelementptr inbounds [' + flen + ' x i8]* ' + format + ', i32 0, i32 0');
               ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ', ' +
                       param.itype + ' ' + param.ilocal + ')');
             }
@@ -601,43 +635,94 @@ function IR(theAST) {
       case 'expr_binop':
         var left = ast.left, ltype,
             right = ast.right, rtype,
+            resType = null, op,
             dest_name = '%' + new_name("binop"),
-            rtype, ritype, op;
+            boolLookup = {gt:'sgt',lt:'slt',
+                          geq:'sge',leq:'sle',
+                          eq:'eq',neq:'ne'},
+            intLookup = {plus:'add',minus:'sub',
+                         star:'mul',slash:'sdiv',
+                         div:'sdiv',mod:'urem'},
+            fltLookup = {plus:'fadd',minus:'fsub',
+                         star:'fmul',slash:'fdiv'};
+          
         ir.push.apply(ir, toIR(left,level,fnames));
         ir.push.apply(ir, toIR(right,level,fnames));
-        // TODO: real typechecking comparison
         ltype = annotate_type(left.type);
         rtype = annotate_type(right.type);
-        if (ast.op in {'gt':1,'lt':1,'eq':1,'geq':1,'leq':1,'neq':1}) {
-          rtype={node:'type',name:'BOOLEAN'};
-          ritype = 'i1';
+        if (ast.op in {gt:1,lt:1,geq:1,leq:1,eq:1,neq:1}) {
+          var msgPrefix = "Operands for '" + ast.op + "' ";
+          // Type-check
+          if (ltype.name !== rtype.name) {
+            throw new Error(msgPrefix + "are not the same type");
+          }
+          if (ast.op in {gt:1,lt:1}) {
+            // scalar, string
+            if (! (isScalarOrString(ltype) && isScalarOrString(rtype))) {
+              throw new Error(msgPrefix + "are not scalar or string");
+            }
+          } else if (ast.op in {geq:1,leq:1}) {
+            // scalar, string, set
+            // TODO: sets
+            if (! (isScalarOrString(ltype) && isScalarOrString(rtype))) {
+              throw new Error(msgPrefix + "are not scalar or string");
+            }
+          } else if (ast.op in {eq:1,neq:1}) {
+            // scalar, string, set or pointer types
+            // TODO: sets and pointers
+            if (! (isScalarOrString(ltype) && isScalarOrString(rtype))) {
+              throw new Error(msgPrefix + "are not scalar or string");
+            }
+          }
+          if (ltype.name === 'REAL') {
+            op = 'ficmp ' + boolLookup[ast.op];
+          } else {
+            op = 'icmp ' + boolLookup[ast.op];
+          }
+          resType={node:'type',name:'BOOLEAN',lltype:'i1'};
+        } else if (ast.op in {plus:1,minus:1,star:1,slash:1,div:1,mod:1}) {
+          if (ast.op === 'slash') {
+            resType = {node:'type',name:'REAL',lltype:"float"};
+          } else if ((ltype.name === 'INTEGER' && rtype.name === 'INTEGER') ||
+                     (ltype.name === 'REAL' && rtype.name === 'REAL')) {
+            resType = ltype;
+          } else if (ltype.name === 'REAL' && rtype.name === 'INTEGER') {
+            resType = ltype;
+          } else if (ltype.name === 'INTEGER' && rtype.name === 'REAL') {
+            resType = rtype;
+          } else {
+            throw new Error("No defined behavior for " +
+                            ltype.name + " " + ast.op + " " + rtype.name);
+          }
+          if (resType.name === 'REAL' && ast.op === 'div') {
+            throw new Error("div can only be used with Integers");
+          }
+          if (resType.name === 'REAL') {
+            op = fltLookup[ast.op];
+          } else {
+            op = intLookup[ast.op];
+          }
+        } else if (ast.op in {and:1,or:1}) {
+          op = ast.op;
+          resType = left.type;
         } else {
-          rtype = left.type;
-          ritype = ltype.lltype;
+          throw new Error("Unexpected expr_binop operand " + ast.op);
         }
-        switch (ast.op) {
-          case 'plus':  op = 'add'; break;
-          case 'minus': op = 'sub'; break;
-          case 'star':  op = 'mul'; break;
-          case 'slash': op = 'sdiv'; break;  // float
-          case 'div':   op = 'sdiv'; break;
-          case 'mod':   op = 'urem'; break;
-
-          case 'and':   op = 'and'; break;
-          case 'or':    op = 'or'; break;
-
-          case 'gt':    op = 'icmp sgt'; break;
-          case 'lt':    op = 'icmp slt'; break;
-          case 'eq':    op = 'icmp eq'; break;
-          case 'geq':   op = 'icmp sge'; break;
-          case 'leq':   op = 'icmp sle'; break;
-          case 'neq':   op = 'icmp ne'; break;
-
-          default: throw new Error("Unexpected expr_binop operand " + ast.op);
+        if (resType.name === 'REAL' && ltype.name === 'INTEGER') {
+          var conv = new_name("%conv");
+          ir.push('  ' + conv + ' = sitofp i32 ' + left.ilocal + ' to float');
+          left.ilocal = conv;
+          left.itype = 'float';
         }
-        ir.push('  ' + dest_name + ' = ' + op + ' ' + ltype.lltype + ' ' + left.ilocal + ', ' + right.ilocal);
-        ast.type = rtype;
-        ast.itype = ritype;
+        if (resType.name === 'REAL' && rtype.name === 'INTEGER') {
+          var conv = new_name("%conv");
+          ir.push('  ' + conv + ' = sitofp i32 ' + right.ilocal + ' to float');
+          right.ilocal = conv;
+          right.itype = 'float';
+        }
+        ir.push('  ' + dest_name + ' = ' + op + ' ' + left.itype + ' ' + left.ilocal + ', ' + right.ilocal);
+        ast.type = resType;
+        ast.itype = resType.lltype;
         ast.ilocal = dest_name;
         break;
 
@@ -705,7 +790,8 @@ function IR(theAST) {
         ast.ilocal = ast.val;
         break;
       case 'real':
-        throw new Error("TODO: support reals");
+        ast.itype = "float";
+        ast.ilocal = ieee754.llvm_float_hex(ast.val);
         break;
       case 'string':
         var sval = ast.val,
