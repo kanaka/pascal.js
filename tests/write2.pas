@@ -1,13 +1,9 @@
 program Sample;
 var
-    A,B,C,D     : Boolean;
+    A,B,C       : Integer;
 begin
-    A := TRUE;
-    B := FALSE;
-    C := A or B;
-    D := A and B;
-    WriteLn('A = ',A);
-    WriteLn('B = ',B);
-    WriteLn('C = ',C);
-    WriteLn('D = ',D)
+    A := 1;
+    B := 2;
+    C := A + B;
+    WriteLn(C) 
 end.

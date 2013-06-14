@@ -3,7 +3,8 @@
  */
 
 var util = require('util'),
-    ieee754 = require('./ieee754');
+    ieee754 = require('./ieee754'),
+    library = require('./library');
 
 function id(identifier) {
   return identifier.split('-').join('_').replace('?', '$');
@@ -77,7 +78,7 @@ function SymbolTable() {
 function IR(theAST) {
 
   var st = new SymbolTable();
-  var vcnt = 0; // variable counter
+  var stdlib = new library.StdLib(st);
   var str_cnt = 0;
   var name_cnt = 0;
   var expected_returned_type = 'NoTyp';
@@ -213,14 +214,9 @@ function IR(theAST) {
             block = ast.block;
         st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
 
-        ir.push("declare i32 @printf(i8*, ...)");
-        ir.push("");
-        ir.push('@.newline = private constant [2 x i8] c"\\0A\\00"');
-        ir.push('@.true_str = private constant [5 x i8] c"TRUE\\00"');
-        ir.push('@.false_str = private constant [6 x i8] c"FALSE\\00"');
-        ir.push('@.str_format = private constant [3 x i8] c"%s\\00"');
-        ir.push('@.int_format = private constant [3 x i8] c"%d\\00"');
-        ir.push('@.float_format = private constant [4 x i8] c"% E\\00"');
+        /* standard library global definitions */
+        ir.push.apply(ir, stdlib.__init__());
+
         ir.push('');
         block.param_list = [];
         ir.push.apply(ir, toIR(block,level,fnames));
@@ -390,99 +386,44 @@ function IR(theAST) {
           // length and types
           ir.push.apply(ir, toIR(cparam,level,fnames));
         }
-        // TODO: perhaps move to a separate library.js
-        switch (id) {
-          case 'WRITE':
-          case 'WRITELN':
-            ir.push('  ; WRITELN start');
-            for(var i=0; i < cparams.length; i++) {
-              var param = cparams[i],
-                  v = vcnt++,
-                  format = null,
-                  flen = 3;
-              switch (param.type.name) {
-                case 'INTEGER': format = "@.int_format"; break;
-                case 'REAL':
-                  var conv = new_name('%conv');
-                  ir.push('  ' + conv + ' = fpext float ' + param.ilocal + ' to double');
-                  format = "@.float_format";
-                  flen = 4;
-                  param.itype = "double";
-                  param.ilocal = conv;
-                  break;
-                case 'STRING':  format = "@.str_format"; break;
-                case 'BOOLEAN':
-                  var br_name = new_name('br'),
-                      br_true = br_name + '_true',
-                      br_false = br_name + '_false',
-                      br_done = br_name + '_done',
-                      bool_local1 = '%' + new_name('bool_local'),
-                      bool_local2 = '%' + new_name('bool_local'),
-                      bool_local_out = '%' + new_name('bool_local');
-                  ir.push('  br ' + param.itype + ' ' + param.ilocal + ', label %' + br_true + ', label %' + br_false);
-                  ir.push('  ' + br_true + ':');
-                  ir.push('    ' + bool_local1 + ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0'); 
-                  ir.push('  br label %' + br_done); 
-                  ir.push('  ' + br_false + ':');
-                  ir.push('    ' + bool_local2 + ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0'); 
-                  ir.push('  br label %' + br_done); 
-                  ir.push('  ' + br_done + ':');
-                  ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 + ', %' + br_true + '], [ ' + bool_local2 + ', %' + br_false + ']');
-                  format = "@.str_format";
-                  param.itype = 'i8*';
-                  param.ilocal = bool_local_out;
-                  break;
-                default:
-                  throw new Error("Unknown WRITE type: " + param.type.name);
-              }
-              ir.push('  %str' + v + ' = getelementptr inbounds [' + flen + ' x i8]* ' + format + ', i32 0, i32 0');
-              ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ', ' +
-                      param.itype + ' ' + param.ilocal + ')');
-            }
-            
-            if (id === 'WRITELN') {
-              v = vcnt++;
-              ir.push('  %str' + v + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
-              ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ')');
-            }
-            ir.push('  ; WRITELN finish');
-            break;
-          default:
-            var pdecl = st.lookup(id);
-            if (!pdecl) {
-              throw new Error("Unknown function '" + id + "'");
-            }
-            var lparams = pdecl.lparams,
-                fparams = pdecl.fparams,
-                param_list = [];
-            for(var i=0; i < lparams.length; i++) {
-              var lparam = lparams[i],
-                  lltype = null;
-              ir.push.apply(ir, toIR(lparam,level,fnames));
-              ltype = annotate_type(lparam.type),
-              param_list.push(ltype.lltype + "* " + lparam.istack);
-            }
-            for(var i=0; i < cparams.length; i++) {
-              var cparam = cparams[i];
-              if (cparams[i].lparam) {
-                throw new Error("TODO handle lparam in call");
-              } else if (fparams[i].var) {
-                param_list.push(cparam.itype + "* " + cparam.istack);
-              } else {
-                param_list.push(cparam.itype + " " + cparam.ilocal);
-              }
-            }
-            if (node === 'expr_call') {
-              var ret = '%' + new_name(pdecl.name + "_ret"),
-                ptype = annotate_type(pdecl.type),
-                lltype = ptype.lltype;
-              ir.push('  ' + ret + ' = call ' + lltype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
-              ast.type = pdecl.type;
-              ast.itype = lltype;
-              ast.ilocal = ret;
+        if (stdlib[id]) {
+          ir.push.apply(ir, stdlib[id](cparams));
+        } else {
+          var pdecl = st.lookup(id);
+          if (!pdecl) {
+            throw new Error("Unknown function '" + id + "'");
+          }
+          var lparams = pdecl.lparams,
+              fparams = pdecl.fparams,
+              param_list = [];
+          for(var i=0; i < lparams.length; i++) {
+            var lparam = lparams[i],
+                lltype = null;
+            ir.push.apply(ir, toIR(lparam,level,fnames));
+            ltype = annotate_type(lparam.type),
+            param_list.push(ltype.lltype + "* " + lparam.istack);
+          }
+          for(var i=0; i < cparams.length; i++) {
+            var cparam = cparams[i];
+            if (cparams[i].lparam) {
+              throw new Error("TODO handle lparam in call");
+            } else if (fparams[i].var) {
+              param_list.push(cparam.itype + "* " + cparam.istack);
             } else {
-              ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
+              param_list.push(cparam.itype + " " + cparam.ilocal);
             }
+          }
+          if (node === 'expr_call') {
+            var ret = '%' + new_name(pdecl.name + "_ret"),
+              ptype = annotate_type(pdecl.type),
+              lltype = ptype.lltype;
+            ir.push('  ' + ret + ' = call ' + lltype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
+            ast.type = pdecl.type;
+            ast.itype = lltype;
+            ast.ilocal = ret;
+          } else {
+            ir.push('  call i32 @' + pdecl.name + "(" + param_list.join(", ") + ")");
+          }
         }
         break;
 

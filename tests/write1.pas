@@ -1,9 +1,7 @@
 program Sample;
-var
-    A,B,C       : Integer;
 begin
-    A := 1;
-    B := 2;
-    C := A + B;
-    WriteLn(C) 
+    WriteLn(1);
+    WriteLn(2.1);
+    WriteLn('a string');
+    WriteLn('Hello ', 1);
 end.
