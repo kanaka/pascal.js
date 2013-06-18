@@ -1,5 +1,4 @@
-
-function StdLib (st) {
+function Library (st) {
   var vcnt = 0;
 
   function __init__() {
@@ -96,9 +95,10 @@ function StdLib (st) {
   }
 
   return {__init__: __init__,
+          CHR: CHR,
           WRITE:WRITE,
-          WRITELN:WRITELN,
-          CHR: CHR};
+          WRITELN:WRITELN
+          };
 };
 
-exports.StdLib = StdLib;
+exports.Library = Library;

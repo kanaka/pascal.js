@@ -3,8 +3,7 @@
  */
 
 var util = require('util'),
-    ieee754 = require('./ieee754'),
-    library = require('./library');
+    ieee754 = require('./ieee754');
 
 function id(identifier) {
   return identifier.split('-').join('_').replace('?', '$');
@@ -78,7 +77,7 @@ function SymbolTable() {
 function IR(theAST) {
 
   var st = new SymbolTable();
-  var stdlib = new library.StdLib(st);
+  var uses_lib_map = {};
   var str_cnt = 0;
   var name_cnt = 0;
   var expected_returned_type = 'NoTyp';
@@ -142,9 +141,10 @@ function IR(theAST) {
     var t = expand_type(type);
     var res = false;
     switch (t.name) {
-      case 'INTEGER': res = true; break;
-      case 'REAL':    res = true; break;
-      case 'BOOLEAN': res = true; break;
+      case 'INTEGER':   res = true; break;
+      case 'REAL':      res = true; break;
+      case 'BOOLEAN':   res = true; break;
+      case 'CHARACTER': res = true; break;
     }
     return res;
   }
@@ -211,12 +211,33 @@ function IR(theAST) {
     switch (node) {
       case 'program':
         var name = ast.id,  // TODO: do anything with program name?
+            uses = ast.uses,
             fparams = ast.fparams,
             block = ast.block;
         st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
 
-        /* standard library global definitions */
-        ir.push.apply(ir, stdlib.__init__());
+        /* Load 'uses' specified libraries */
+        var use_list = ['SYSTEM']; // automatically load these
+        /* user specified */
+        for (var i=0; i<uses.length; i++) {
+          if (use_list.indexOf(uses[i]) < 0) {
+            use_list.push(use[i]);
+          }
+        }
+        console.warn("use_list:",use_list);
+
+        for (var i=0; i<use_list.length; i++) {
+          var use = use_list[i],
+              rlib = require('./libs/' + use.toLowerCase()),
+              lib = new rlib.Library(st);
+          console.warn("use:",use, "lib:", lib);
+          for (var prog in lib) {
+            if (lib.hasOwnProperty(prog) && prog !== '__init__') {
+              uses_lib_map[prog] = lib[prog];
+            }
+          }
+          ir.push.apply(ir, lib.__init__());
+        }
 
         ir.push('');
         block.param_list = [];
@@ -422,8 +443,8 @@ function IR(theAST) {
           // length and types
           ir.push.apply(ir, toIR(cparam,level,fnames));
         }
-        if (stdlib[id]) {
-          ir.push.apply(ir, stdlib[id](ast, cparams));
+        if (typeof uses_lib_map[id] === 'function') {
+          ir.push.apply(ir, uses_lib_map[id](ast, cparams));
         } else {
           try {
             var pdecl = st.lookup(id);

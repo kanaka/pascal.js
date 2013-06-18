@@ -146,26 +146,26 @@ WHITESPACE              \s+
 
 %% /* language grammar */
 
-program         : program_header SEMI pblock DOT        {{ $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$3};
+program         : program_header block DOT              {{ $$ = {node:'program',id:$1.id,
+                                                                 fparams:$1.fparams,uses:$1.uses,block:$2};
                                                            if (typeof module !== 'undefined' && require.main === module) {
                                                              console.warn(inspect($$));
                                                            }
                                                            return $$; }}
                 ;
-program_header  : PROGRAM id                            {{ $$ = {node:'program_heading',id:$2,fparams:[]}; }}
-                | PROGRAM id LPAREN ids RPAREN          {{ $$ = {node:'program_heading',id:$2,fparams:$4}; }}
-                ;
-pblock          : use_decls block                       {{ $$ = $2; }}
-                |           block                       {{ $$ = $1; }}
+program_header  : PROGRAM id                   SEMI uses {{ $$ = {node:'program_heading',id:$2,fparams:[],uses:$4}; }}
+                | PROGRAM id                   SEMI      {{ $$ = {node:'program_heading',id:$2,fparams:[],uses:[]}; }}
+                | PROGRAM id LPAREN ids RPAREN SEMI uses {{ $$ = {node:'program_heading',id:$2,fparams:$4,uses:$7}; }}
+                | PROGRAM id LPAREN ids RPAREN SEMI      {{ $$ = {node:'program_heading',id:$2,fparams:$4,uses:[]}; }}
                 ;
 block           : decls cstmt                           {{ $$ = {node:'block',decls:$1,stmts:$2}; }}
                 |       cstmt                           {{ $$ = {node:'block',decls:[],stmts:$1}; }}
                 ;
 
-use_decls       : use_decls use_decl                    {{ $$ = $1.concat($2); }}
-                |           use_decl                    {{ $$ = [$1]; }}
+uses            : uses use_decl                         {{ $$ = $1.concat($2); }}
+                |      use_decl                         {{ $$ = $1; }}
                 ;
-use_decl        : USES ids SEMI                         {{ $$ = {node:'use_decl',ids:$2}; }}
+use_decl        : USES ids SEMI                         {{ $$ = $2; }}
                 ;
 /* decl is a plural (an array) already */
 decls           : decls decl                            {{ $$ = $1.concat($2); }}
