@@ -790,8 +790,9 @@ function IR(theAST) {
         }
         break;
       case 'string':
-        var sval = ast.val,
-            slen = sval.length+1,
+        var slen = ast.val.length+1,
+            re = /"/g,
+            sval = ast.val.replace(re, '\\22'),
             sname = '@.string' + (str_cnt++),
             lname;
         ir.push([sname + ' = private constant [' + slen + ' x i8] c"' + sval + '\\00"']);

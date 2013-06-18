@@ -5,7 +5,8 @@
 %options case-insensitive
 %s comment
 
-STRING                  "'"[^']*"'"
+/* STRING                  "'"[^']*"'" */
+STRING                  "'"(?:[^']+|"''")*"'"
 REAL                    [0-9]+"."[0-9]+
 INTEGER                 [0-9]+
 BOOLEAN                 "TRUE"|"FALSE"
@@ -306,7 +307,10 @@ exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); 
                 ;
 expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:{node:'type',name:'INTEGER'},val:parseInt($1)}; }}
                 | REAL_LITERAL                          {{ $$ = {node:'real',type:{node:'type',name:'REAL'},val:parseFloat($1)}; }}
-                | STRING_LITERAL                        {{ $$ = {node:'string',type:{node:'type',name:'STRING'},val:$1.substr(1,$1.length-2)}; }}
+                | STRING_LITERAL                        {{ var raw = $1.substr(1,$1.length-2),
+                                                               re = /''/g,
+                                                               val = raw.replace(re, "'");
+                                                           $$ = {node:'string',type:{node:'type',name:'STRING'},val:val}; }}
                 | CHARACTER_LITERAL                     {{ $$ = {node:'character',type:{node:'type',name:'CHARACTER'},val:$1}; }}
                 | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:true}; }}
                 | FALSE_LITERAL                         {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:false}; }}
