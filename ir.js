@@ -102,10 +102,11 @@ function IR(theAST) {
   function annotate_type(type) {
     var t = expand_type(type);
     switch (t.name) {
-      case 'INTEGER': t.lltype = "i32"; break;
-      case 'REAL':    t.lltype = "float"; break;
-      case 'BOOLEAN': t.lltype = "i1"; break;
-      case 'STRING':  t.lltype = "i8*"; break;
+      case 'INTEGER':   t.lltype = "i32"; break;
+      case 'REAL':      t.lltype = "float"; break;
+      case 'BOOLEAN':   t.lltype = "i1"; break;
+      case 'STRING':    t.lltype = "i8*"; break;
+      case 'CHARACTER': t.lltype = "i8"; break;
       case 'ARRAY':
         var index = t.index,
             start = index.start,
@@ -312,12 +313,27 @@ function IR(theAST) {
 
       case 'var_decl':
         var id = ast.id,
-            vtype = annotate_type(ast.type),
             pdecl = st.lookup(fname),
-            sname = "%" + new_name(id + "_stack");
+            sname = "%" + new_name(id + "_stack"),
+            vtype = annotate_type(ast.type);
 
         st.insert(id,{node:'var_decl',type:vtype,sname:sname,level:pdecl.level});
         ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
+        break;
+
+      case 'const_decl':
+        var id = ast.id,
+            expr = ast.expr,
+            pdecl = st.lookup(fname),
+            sname = "%" + new_name(id + "_stack"),
+            vtype = null;
+
+        ir.push.apply(ir, toIR(expr,level,fnames));
+        vtype = annotate_type(expr.type);
+
+        st.insert(id,{node:'const_decl',type:vtype,sname:sname,level:pdecl.level});
+        ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
+        ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', i8* ' + sname);
         break;
 
       case 'proc_decl':
@@ -387,10 +403,11 @@ function IR(theAST) {
           ir.push.apply(ir, toIR(cparam,level,fnames));
         }
         if (stdlib[id]) {
-          ir.push.apply(ir, stdlib[id](cparams));
+          ir.push.apply(ir, stdlib[id](ast, cparams));
         } else {
-          var pdecl = st.lookup(id);
-          if (!pdecl) {
+          try {
+            var pdecl = st.lookup(id);
+          } catch (e) {
             throw new Error("Unknown function '" + id + "'");
           }
           var lparams = pdecl.lparams,
@@ -733,6 +750,24 @@ function IR(theAST) {
       case 'real':
         ast.itype = "float";
         ast.ilocal = ieee754.llvm_float_hex(ast.val);
+        break;
+      case 'character':
+        ast.itype = "i8";
+        if (ast.val[0] === "#") {
+          ast.ilocal = parseInt(ast.val.slice(1),10);
+        } else {
+          switch (ast.val[1]) {
+            case '@': ast.ilocal = 0; break;
+            case 'G': ast.ilocal = 7; break;
+            case 'H': ast.ilocal = 8; break;
+            case 'I': ast.ilocal = 9; break;
+            case 'J': ast.ilocal = 10; break;
+            case 'L': ast.ilocal = 12; break;
+            case 'M': ast.ilocal = 13; break;
+            case '[': ast.ilocal = 27; break;
+            case '?': ast.ilocal = 127; break;
+          }
+        }
         break;
       case 'string':
         var sval = ast.val,

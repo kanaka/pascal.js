@@ -5,6 +5,8 @@ TESTS ?= write1 write2 \
 	 expr1 expr2 \
 	 float1 \
 	 bool1 \
+	 char1 \
+	 const1 \
 	 type1 type2 type3 \
 	 proc1 proc2 proc3 proc4 proc5 pfib \
 	 func1 ffib \

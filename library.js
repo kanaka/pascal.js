@@ -10,13 +10,13 @@ function StdLib (st) {
     ir.push('@.true_str = private constant [5 x i8] c"TRUE\\00"');
     ir.push('@.false_str = private constant [6 x i8] c"FALSE\\00"');
     ir.push('@.str_format = private constant [3 x i8] c"%s\\00"');
+    ir.push('@.chr_format = private constant [3 x i8] c"%c\\00"');
     ir.push('@.int_format = private constant [3 x i8] c"%d\\00"');
     ir.push('@.float_format = private constant [4 x i8] c"% E\\00"');
     return ir;
   }
 
-  function WRITE (cparams) {
-      //console.warn(cparams);
+  function WRITE (ast, cparams) {
     var ir = [];
     ir.push('  ; WRITE start');
     for(var i=0; i < cparams.length; i++) {
@@ -25,7 +25,9 @@ function StdLib (st) {
           format = null,
           flen = 3;
       switch (param.type.name) {
-        case 'INTEGER': format = "@.int_format"; break;
+        case 'INTEGER':   format = "@.int_format"; break;
+        case 'STRING':    format = "@.str_format"; break;
+        case 'CHARACTER': format = "@.chr_format"; break;
         case 'REAL':
           var conv = '%conv_' + v;
           ir.push('  ' + conv + ' = fpext float ' + param.ilocal + ' to double');
@@ -34,7 +36,6 @@ function StdLib (st) {
           param.itype = "double";
           param.ilocal = conv;
           break;
-        case 'STRING':  format = "@.str_format"; break;
         case 'BOOLEAN':
           var br_name = 'br' + v,
               br_true = br_name + '_true',
@@ -67,9 +68,9 @@ function StdLib (st) {
     return ir;
   }
 
-  function WRITELN (cparams) {
+  function WRITELN (ast, cparams) {
     var ir = [];
-    ir.push.apply(ir, WRITE(cparams));
+    ir.push.apply(ir, WRITE(ast, cparams));
     v = vcnt++;
     ir.push('  ; WRITELN start');
     ir.push('  %str' + v + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
@@ -78,9 +79,26 @@ function StdLib (st) {
     return ir;
   }
 
+  function CHR (ast, cparams) {
+    var ir = [], clen = cparams.length,
+        cparam = cparams[0],
+        lname = "%char" + vcnt++;
+    if (clen !== 1) {
+      throw new Error("Chr only accepts one argument (" + clen + " given)");
+    }
+    ir.push('  ; CHR start');
+    ir.push('  ' + lname + ' = trunc ' + cparam.itype + ' ' + cparam.ilocal + ' to i8');
+    ir.push('  ; CHR finish');
+    ast.type = {node:'type',name:'CHARACTER'};
+    ast.itype = 'i8';
+    ast.ilocal = lname;
+    return ir;
+  }
+
   return {__init__: __init__,
           WRITE:WRITE,
-          WRITELN:WRITELN};
+          WRITELN:WRITELN,
+          CHR: CHR};
 };
 
 exports.StdLib = StdLib;

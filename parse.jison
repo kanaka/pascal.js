@@ -9,6 +9,7 @@ STRING                  "'"[^']*"'"
 REAL                    [0-9]+"."[0-9]+
 INTEGER                 [0-9]+
 BOOLEAN                 "TRUE"|"FALSE"
+CHARACTER               "#"[0-9]+|"^".
 ID                      [A-Za-z_][A-Za-z0-9_]*
 WHITESPACE              \s+
 
@@ -20,6 +21,15 @@ WHITESPACE              \s+
 <comment>"*)"           this.begin('INITIAL');
 
 "{".*"}"                /* skip whitespace */
+
+/* Literals */
+{REAL}                  return "REAL_LITERAL";
+{INTEGER}               return "INTEGER_LITERAL";
+{STRING}                return "STRING_LITERAL";
+{CHARACTER}             return "CHARACTER_LITERAL";
+"TRUE"                  return "TRUE_LITERAL";
+"FALSE"                 return "FALSE_LITERAL";
+
 
 ":="                    return "ASSIGN";  /* Needs to be before COLON and EQ */
 
@@ -86,6 +96,7 @@ WHITESPACE              \s+
 "TO"                    return "TO";
 "TYPE"                  return "TYPE";
 "UNTIL"                 return "UNTIL";
+"USES"                  return "USES";
 "VAR"                   return "VAR";
 "WHILE"                 return "WHILE";
 "WITH"                  return "WITH";
@@ -98,11 +109,6 @@ WHITESPACE              \s+
 "CHAR"                  return "CHAR";
 "BYTE"                  return "BYTE";
 
-{REAL}                  return "REAL_LITERAL";
-{INTEGER}               return "INTEGER_LITERAL";
-{STRING}                return "STRING_LITERAL";
-"TRUE"                  return "TRUE_LITERAL";
-"FALSE"                 return "FALSE_LITERAL";
 
 {ID}                    return "ID";
 
@@ -139,7 +145,7 @@ WHITESPACE              \s+
 
 %% /* language grammar */
 
-program         : program_header SEMI block DOT         {{ $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$3};
+program         : program_header SEMI pblock DOT        {{ $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$3};
                                                            if (typeof module !== 'undefined' && require.main === module) {
                                                              console.warn(inspect($$));
                                                            }
@@ -148,20 +154,34 @@ program         : program_header SEMI block DOT         {{ $$ = {node:'program',
 program_header  : PROGRAM id                            {{ $$ = {node:'program_heading',id:$2,fparams:[]}; }}
                 | PROGRAM id LPAREN ids RPAREN          {{ $$ = {node:'program_heading',id:$2,fparams:$4}; }}
                 ;
+pblock          : use_decls block                       {{ $$ = $2; }}
+                |           block                       {{ $$ = $1; }}
+                ;
 block           : decls cstmt                           {{ $$ = {node:'block',decls:$1,stmts:$2}; }}
                 |       cstmt                           {{ $$ = {node:'block',decls:[],stmts:$1}; }}
                 ;
 
+use_decls       : use_decls use_decl                    {{ $$ = $1.concat($2); }}
+                |           use_decl                    {{ $$ = [$1]; }}
+                ;
+use_decl        : USES ids SEMI                         {{ $$ = {node:'use_decl',ids:$2}; }}
+                ;
 /* decl is a plural (an array) already */
 decls           : decls decl                            {{ $$ = $1.concat($2); }}
                 |       decl                            {{ $$ = $1; }}
                 ;
-decl            : TYPE type_decls SEMI                  {{ $$ = $2; }}
+decl            : CONST const_decls SEMI                {{ $$ = $2; }}
+                | TYPE type_decls SEMI                  {{ $$ = $2; }}
                 | VAR var_decls SEMI                    {{ $$ = $2; }}
                 | PROCEDURE proc_decl SEMI              {{ $$ = [$2]; }}
                 | FUNCTION func_decl SEMI               {{ $$ = [$2]; }}
                 ;
 
+const_decls     : const_decls SEMI const_decl           {{ $$ = $1.concat($3); }}
+                |                  const_decl           {{ $$ = [$1]; }}
+                ;
+const_decl      : id EQ expr                            {{ $$ = {node:'const_decl',id:$1,expr:$3}; }}
+                ;
 type_decls      : type_decls SEMI type_decl             {{ $$ = $1.concat($3); }}
                 |                 type_decl             {{ $$ = [$1]; }}
                 ;
@@ -172,7 +192,7 @@ type            : id                                    {{ $$ = {node:'type',nam
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
                 | STRING                                {{ $$ = {node:'type',name:'STRING'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
-//                | CHAR                                  {{ $$ = {node:'type',name:'CHAR'}; }}
+                | CHAR                                  {{ $$ = {node:'type',name:'CHARACTER'}; }}
 //                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
                 /* ordinal types */
 //                | enumerated_type                       {{ }}
@@ -217,7 +237,7 @@ var_decl        : ids COLON type                        {{ $$ = [];
                 ;
 
 proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
-                | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$4}; }}
+                | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$3}; }}
                 |
                 ;
 func_decl       : id formal_params COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6}; }}
@@ -253,6 +273,7 @@ closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assi
                 | id call_params                        {{ $$ = {node:'stmt_call',id:$1,call_params:$2}; }}
                 | lvalue                                {{ $$ = {node:'stmt_call',id:$1.id,call_params:[]}; }}
                 | cstmt                                 {{ $$ = {node:'stmt_compound',stmts:$1}; }}
+                | repeat_stmt                           {{ $$ = $1; }}
                 | closed_if_stmt                        {{ $$ = $1; }}
                 | closed_while_stmt                     {{ $$ = $1; }}
                 | closed_for_stmt                       {{ $$ = $1; }}
@@ -260,6 +281,9 @@ closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assi
 open_stmt       : open_if_stmt                          {{ $$ = $1; }}
                 | open_while_stmt                       {{ $$ = $1; }}
                 | open_for_stmt                         {{ $$ = $1; }}
+                ;
+repeat_stmt     : REPEAT stmts      UNTIL expr          {{ $$ = {node:'stmt_repeat',expr:$4,stmts:$2}; }}
+                | REPEAT stmts SEMI UNTIL expr          {{ $$ = {node:'stmt_repeat',expr:$5,stmts:$2}; }}
                 ;
 closed_if_stmt  : IF expr THEN closed_stmt ELSE closed_stmt {{ $$ = {node:'stmt_if',expr:$2,tstmt:$4,fstmt:$6}; }}
                 ;
@@ -283,6 +307,7 @@ exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); 
 expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:{node:'type',name:'INTEGER'},val:parseInt($1)}; }}
                 | REAL_LITERAL                          {{ $$ = {node:'real',type:{node:'type',name:'REAL'},val:parseFloat($1)}; }}
                 | STRING_LITERAL                        {{ $$ = {node:'string',type:{node:'type',name:'STRING'},val:$1.substr(1,$1.length-2)}; }}
+                | CHARACTER_LITERAL                     {{ $$ = {node:'character',type:{node:'type',name:'CHARACTER'},val:$1}; }}
                 | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:true}; }}
                 | FALSE_LITERAL                         {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:false}; }}
                 | lvalue                                {{ $$ = $1; }}
