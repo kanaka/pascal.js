@@ -217,20 +217,18 @@ function IR(theAST) {
         st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
 
         /* Load 'uses' specified libraries */
-        var use_list = ['SYSTEM']; // automatically load these
+        var use_list = ['SYSTEM', 'CRT']; // automatically load these
         /* user specified */
         for (var i=0; i<uses.length; i++) {
           if (use_list.indexOf(uses[i]) < 0) {
             use_list.push(use[i]);
           }
         }
-        console.warn("use_list:",use_list);
 
         for (var i=0; i<use_list.length; i++) {
           var use = use_list[i],
               rlib = require('./libs/' + use.toLowerCase()),
               lib = new rlib.Library(st);
-          console.warn("use:",use, "lib:", lib);
           for (var prog in lib) {
             if (lib.hasOwnProperty(prog) && prog !== '__init__') {
               uses_lib_map[prog] = lib[prog];
