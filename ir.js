@@ -353,38 +353,58 @@ function IR(theAST) {
 
       case 'stmt_assign':
         var lvalue = ast.lvalue,
-            expr = ast.expr
-            lltype = null;
+            expr = ast.expr;
         ir.push('  ; ASSIGN start');
         ir.push.apply(ir,toIR(expr,level,fnames));
+        var litype = null, listack = null,
+            eitype = expr.itype, eilocal = expr.ilocal;
+
         if (lvalue.id === fname) {
           // This is actually a function name being used to set the
           // return value for the function so we don't evaluate the
           // lvalue
           var pdecl = st.lookup(fname);
-          lvalue.type = pdecl.type;
           ptype = annotate_type(pdecl.type),
+          lvalue.type = pdecl.type;
           lvalue.itype = ptype.lltype,
           pdecl.ireturn = true;
           pdecl.itype = lvalue.itype;
-          ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + pdecl.itype + '* %retval');
           st.replace(fname,pdecl);
+          litype = lvalue.itype;
+          listack = "%retval";
         } else {
           ir.push.apply(ir,toIR(lvalue,level,fnames));
-          if (expr.type.name === 'STRING' && expr.val) {
-            // string literal being assigned so coerce
-            var decay = '%' + new_name('arraydecay');
-            ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
-            ir.push('  store i8* ' + decay + ', ' + lvalue.itype + '* ' + lvalue.istack);
-          } else {
-            ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + lvalue.itype + '* ' + lvalue.istack);
-          }
+          litype = lvalue.itype;
+          listack = lvalue.istack;
         }
-        
-        if (lvalue.type.name !== expr.type.name) {
+
+        if (lvalue.type.name === 'CHARACTER' && expr.type.name === 'STRING') {
+          // coerce string to character
+          // TODO: assert that STRING is length of 1
+          var decay = '%' + new_name('arraydecay'),
+              chr = '%' + new_name('chr');
+          ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
+          ir.push('  ' + chr + ' = load i8* ' + decay); 
+          eitype = 'i8';
+          eilocal = chr;
+        } else if (lvalue.type.name === 'REAL' && expr.type.name === 'INTEGER') {
+          // coerce integer to real
+          var conv = new_name("%conv");
+          ir.push('  ' + conv + ' = sitofp i32 ' + expr.ilocal + ' to float');
+          eitype = "float";
+          eilocal = conv;
+        } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING' && expr.val) {
+          // string literal being assigned so coerce
+          var decay = '%' + new_name('arraydecay');
+          ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
+          eitype = 'i8*';
+          eilocal = decay;
+        } else if (lvalue.type.name !== expr.type.name) {
           throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
         }
 
+        ir.push('  store ' + eitype + ' ' + eilocal + ', ' + litype + '* ' + listack);
+        
         ast.itype = lvalue.itype;
         ast.istack = lvalue.istack;
         ast.ilocal = expr.ilocal;
@@ -398,7 +418,7 @@ function IR(theAST) {
         // evaluate the parameters
         for(var i=0; i < cparams.length; i++) {
           var cparam = cparams[i];
-          // TODO: make sure call params and formal params match
+          // TODO: assert that call params and formal params match
           // length and types
           ir.push.apply(ir, toIR(cparam,level,fnames));
         }
