@@ -374,7 +374,7 @@ function IR(theAST) {
 
         var sname = allocate_variable(ir,'const_decl',id,fname,expr.type);
 
-        ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', i8* ' + sname);
+        ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + expr.itype + '* ' + sname);
         break;
 
       case 'proc_decl':
@@ -848,20 +848,29 @@ function IR(theAST) {
         break;
 
       case 'variable':
-        var id = ast.id,
-            vdecl = st.lookup(ast.id),
-            vtype = annotate_type(vdecl.type),
-            vlevel = vdecl.level,
-            lname = "%" + new_name(id + "_local");
+        var vdecl;
+        try {
+          vdecl = st.lookup(ast.id);
+        } catch (e) {
+          vdecl = null;
+        }
 
-        if (vdecl.fparams) {
+        if ((vdecl && vdecl.fparams) ||
+            (typeof uses_lib_map[ast.id] === "function")) {
           // This is actually a function call expression so
           // replace the AST with a function and evalutate it
           ast.node = 'expr_call';
           ast.call_params = [];
           ir.push.apply(ir, toIR(ast,level,fnames));
           break;
+        } else if (!vdecl) {
+          throw new Error("Variable '" + ast.id + "' not found in symbol table or in libraries");
         }
+
+        var id = ast.id,
+            vtype = annotate_type(vdecl.type),
+            vlevel = vdecl.level,
+            lname = "%" + new_name(id + "_local");
 
         // Add variables from a higher lexical scope to our current
         // subprogram param list
