@@ -99,35 +99,47 @@ function IR(theAST) {
   // string. If the type is a named type then it will be resolved to
   // a base type first.
   function annotate_type(type) {
-    var t = expand_type(type);
+    var t = expand_type(type),
+        lltype, vdef = "0";
     switch (t.name) {
-      case 'INTEGER':   t.lltype = "i32"; break;
-      case 'REAL':      t.lltype = "float"; break;
-      case 'BOOLEAN':   t.lltype = "i1"; break;
-      case 'STRING':    t.lltype = "i8*"; break;
-      case 'CHARACTER': t.lltype = "i8"; break;
+      case 'INTEGER':   lltype = "i32";   vdef = "0"; break;
+      case 'REAL':      lltype = "float"; vdef = "0.0"; break;
+      case 'BOOLEAN':   lltype = "i1";    vdef = "0"; break;
+      case 'CHARACTER': lltype = "i8";    vdef = "0"; break;
+      case 'STRING':    lltype = "i8*";   vdef = "null"; break;
       case 'ARRAY':
         var index = t.index,
             start = index.start,
-            end = index.end;
-        t.lltype = '[' + (end-start+1) + ' x ' + annotate_type(t.type).lltype + ']';
+            end = index.end,
+            vdefs = [],
+            ttype = annotate_type(t.type);
+        lltype = '[' + (end-start+1) + ' x ' + ttype.lltype + ']';
+        for (var i=0; i < end-start+1; i++) {
+          vdefs.push(ttype.lltype + ' ' + ttype.default_value);
+        }
+        vdef = '[' + vdefs.join(', ') + ']';
         break;
       case 'RECORD':
-        var comps = [],
+        var comps = [], vdefs = [],
             sections = t.sections;
         t.component_map = {};
         for (var i=0; i<sections.length; i++) {
-          var comp = sections[i];
-          comps.push(annotate_type(comp.type).lltype);
+          var comp = sections[i],
+              ttype = annotate_type(comp.type);
+          comps.push(ttype.lltype);
+          vdefs.push(ttype.lltype + ' ' + ttype.default_value);
           t.component_map[comp.id] = i;
         }
-        t.lltype = "{" + comps.join(", ") + "}";
+        lltype = "{" + comps.join(", ") + "}";
+        vdef = '{' + vdefs.join(', ') + '}';
         break;
       default: throw new Error("TODO: handle " + t.name + " type");
     }
+    t.lltype = lltype;
+    t.default_value = vdef;
     // Copy up the type data
     type.name = t.name;
-    var keys = ['type', 'lltype', 'index', 'sections', 'component_map'];
+    var keys = ['type', 'lltype', 'default_value', 'index', 'sections', 'component_map'];
     for (var i=0; i < keys.length; i++) {
       var k = keys[i];
       if (typeof t[k] !== 'undefined' && typeof type[k] === 'undefined') {
@@ -175,6 +187,26 @@ function IR(theAST) {
     return cnames;
   }
 
+  function allocate_variable(ir,node,id,fname,type) {
+    var pdecl = st.lookup(fname),
+        level = pdecl.level,
+        vtype = annotate_type(type),
+        vdef = vtype.default_value;
+
+    if (level === 0) {
+      // global scope
+      var sname = "@" + new_name(id);
+      ir.push([sname + ' = common global ' + vtype.lltype + ' ' + vdef]);
+    } else {
+      // sub-program scope
+      var sname = "%" + new_name(id + "_stack");
+      ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
+      ir.push('  store ' + vtype.lltype + ' ' + vdef + ', ' + vtype.lltype + '* ' + sname);
+    }
+
+    st.insert(id,{node:node,type:vtype,sname:sname,level:pdecl.level});
+    return sname;
+  }
 
   // normalizeIR takes a JSON IR
   function normalizeIR(ir) {
@@ -331,27 +363,17 @@ function IR(theAST) {
         break;
 
       case 'var_decl':
-        var id = ast.id,
-            pdecl = st.lookup(fname),
-            sname = "%" + new_name(id + "_stack"),
-            vtype = annotate_type(ast.type);
-
-        st.insert(id,{node:'var_decl',type:vtype,sname:sname,level:pdecl.level});
-        ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
+        var sname = allocate_variable(ir,'var_decl',ast.id,fname,ast.type);
         break;
 
       case 'const_decl':
         var id = ast.id,
-            expr = ast.expr,
-            pdecl = st.lookup(fname),
-            sname = "%" + new_name(id + "_stack"),
-            vtype = null;
+            expr = ast.expr;
 
         ir.push.apply(ir, toIR(expr,level,fnames));
-        vtype = annotate_type(expr.type);
 
-        st.insert(id,{node:'const_decl',type:vtype,sname:sname,level:pdecl.level});
-        ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
+        var sname = allocate_variable(ir,'const_decl',id,fname,expr.type);
+
         ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', i8* ' + sname);
         break;
 
@@ -406,18 +428,18 @@ function IR(theAST) {
           ir.push('  ' + chr + ' = load i8* ' + decay); 
           eitype = 'i8';
           eilocal = chr;
-        } else if (lvalue.type.name === 'REAL' && expr.type.name === 'INTEGER') {
-          // coerce integer to real
-          var conv = new_name("%conv");
-          ir.push('  ' + conv + ' = sitofp i32 ' + expr.ilocal + ' to float');
-          eitype = "float";
-          eilocal = conv;
         } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING' && expr.val) {
           // string literal being assigned so coerce
           var decay = '%' + new_name('arraydecay');
           ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
           eitype = 'i8*';
           eilocal = decay;
+        } else if (lvalue.type.name === 'REAL' && expr.type.name === 'INTEGER') {
+          // coerce integer to real
+          var conv = new_name("%conv");
+          ir.push('  ' + conv + ' = sitofp i32 ' + expr.ilocal + ' to float');
+          eitype = "float";
+          eilocal = conv;
         } else if (lvalue.type.name !== expr.type.name) {
           throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
         }
@@ -814,7 +836,7 @@ function IR(theAST) {
             sval = ast.val.replace(re, '\\22'),
             sname = '@.string' + (str_cnt++),
             lname;
-        ir.push([sname + ' = private constant [' + slen + ' x i8] c"' + sval + '\\00"']);
+        ir.push([sname + ' = private unnamed_addr constant [' + slen + ' x i8] c"' + sval + '\\00"']);
         ast.itype = '[' + slen + ' x i8]*';
         ast.ilocal = sname;
         ast.istack = sname;
@@ -829,7 +851,6 @@ function IR(theAST) {
         var id = ast.id,
             vdecl = st.lookup(ast.id),
             vtype = annotate_type(vdecl.type),
-            sname = vdecl.sname,
             vlevel = vdecl.level,
             lname = "%" + new_name(id + "_local");
 
@@ -842,8 +863,9 @@ function IR(theAST) {
           break;
         }
 
-        // Add on any variables from a higher lexical scope first
-        if (level !== vlevel) {
+        // Add variables from a higher lexical scope to our current
+        // subprogram param list
+        if (vlevel > 0 && level !== vlevel) {
           // Variable is in higher lexical scope, simulate static
           // link by passing the variable through intervening
           // sub-programs

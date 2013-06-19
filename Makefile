@@ -6,13 +6,13 @@ TESTS ?= write1 write2 \
 	 float1 \
 	 bool1 \
 	 char1 \
-	 const1 \
+	 const1 const2 \
 	 type1 type2 type3 \
 	 proc1 proc2 proc3 proc4 proc5 pfib \
 	 func1 ffib \
 	 string1 string2 \
 	 if1 if2 \
-	 nested1 nested2 nested3 \
+	 nested1 nested2 nested3 nested4 \
 	 for1 for2 \
 	 array1 array2 array4 array5 array6 array7 \
 	 record1 record2 record3 record4 \
@@ -26,7 +26,7 @@ parse.js: parse.jison
 	jison parse.jison
 
 clean:
-	rm $(BUILDDIR)/*
+	rm $(BUILDDIR)/* parse.js
 
 
 TEST_DEPS = ir.js parse.js
