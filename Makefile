@@ -1,5 +1,6 @@
 TESTDIR ?= tests
 BUILDDIR ?= build
+RUNLL ?= ./runll
 
 TESTS ?= write1 write2 \
 	 expr1 expr2 \
@@ -59,7 +60,7 @@ $(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
 	fi	
 
 $(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.ll
-	lli $< > $@
+	$(RUNLL) $< > $@
 
 $(DIFFS): $(BUILDDIR)/%.diff: $(BUILDDIR)/%.out1 $(BUILDDIR)/%.out2
 	diff -u $^ > $@
