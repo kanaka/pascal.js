@@ -3,18 +3,22 @@ function Library (st) {
 
   function __init__() {
     var ir = [];
-    ir.push("declare i32 @printf(i8*, ...)");
-    ir.push("declare double @drand48()");
-    ir.push("declare i32 @lrand48()");
-    ir.push("");
-    ir.push('@.newline = private constant [2 x i8] c"\\0A\\00"');
-    ir.push('@.true_str = private constant [5 x i8] c"TRUE\\00"');
-    ir.push('@.false_str = private constant [6 x i8] c"FALSE\\00"');
-    ir.push('@.str_format = private constant [3 x i8] c"%s\\00"');
-    ir.push('@.chr_format = private constant [3 x i8] c"%c\\00"');
-    ir.push('@.int_format = private constant [3 x i8] c"%d\\00"');
-    ir.push('@.float_format = private constant [4 x i8] c"% E\\00"');
+    ir.push(["declare i32 @printf(i8*, ...)"]);
+    ir.push(["declare double @drand48()"]);
+    ir.push(["declare i32 @lrand48()"]);
+    ir.push([""]);
+    ir.push(['@.newline = private constant [2 x i8] c"\\0A\\00"']);
+    ir.push(['@.true_str = private constant [5 x i8] c"TRUE\\00"']);
+    ir.push(['@.false_str = private constant [6 x i8] c"FALSE\\00"']);
+    ir.push(['@.str_format = private constant [3 x i8] c"%s\\00"']);
+    ir.push(['@.chr_format = private constant [3 x i8] c"%c\\00"']);
+    ir.push(['@.int_format = private constant [3 x i8] c"%d\\00"']);
+    ir.push(['@.float_format = private constant [4 x i8] c"% E\\00"']);
     return ir;
+  }
+
+  function __stop__() {
+      return [];
   }
 
   function WRITE (ast, cparams) {
@@ -127,6 +131,7 @@ function Library (st) {
   }
 
   return {__init__: __init__,
+          __stop__: __stop__,
           CHR: CHR,
           WRITE:WRITE,
           WRITELN:WRITELN,

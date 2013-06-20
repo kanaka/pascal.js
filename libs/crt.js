@@ -4,8 +4,12 @@ function Library (st) {
 
   function __init__() {
     var ir = [];
-    ir.push("declare i32 @usleep(i32)");
+    ir.push(["declare i32 @usleep(i32)"]);
     return ir;
+  }
+
+  function __stop__() {
+      return [];
   }
 
   function CLRSCR (ast, cparams) {
@@ -34,6 +38,7 @@ function Library (st) {
   }
 
   return {__init__: __init__,
+          __stop__: __stop__,
           //CLRSCR:CLRSCR,
           DELAY:DELAY,
           //GOTOXY:GOTOXY

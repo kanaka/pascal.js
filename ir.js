@@ -248,43 +248,49 @@ function IR(theAST) {
             block = ast.block;
         st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
 
-        /* Load 'uses' specified libraries */
-        var use_list = ['SYSTEM', 'CRT']; // automatically load these
-        /* user specified */
-        for (var i=0; i<uses.length; i++) {
-          if (use_list.indexOf(uses[i]) < 0) {
-            use_list.push(use[i]);
-          }
-        }
-
-        for (var i=0; i<use_list.length; i++) {
-          var use = use_list[i],
-              rlib = require('./libs/' + use.toLowerCase()),
-              lib = new rlib.Library(st);
-          for (var prog in lib) {
-            if (lib.hasOwnProperty(prog) && prog !== '__init__') {
-              uses_lib_map[prog] = lib[prog];
-            }
-          }
-          ir.push.apply(ir, lib.__init__());
-        }
-
         ir.push('');
         block.param_list = [];
         ir.push.apply(ir, toIR(block,level,fnames));
         break;
 
       case 'block':
-        var decls = ast.decls,
+        var uses = ast.uses,
+            decls = ast.decls,
             stmts = ast.stmts,
             pdecl = st.lookup(fname),
             lparams = pdecl.lparams,
             fparams = pdecl.fparams,
             param_list = [],
             lparam_list = [],
+            uses_init_ir = [],
+            uses_stop_ir = [],
             pdecl_ir = [],
             vdecl_ir = [],
             stmts_ir = [];
+
+        /* Evaluate libraries specified in the 'uses' declaration */
+        if (uses) {
+          var use_list = ['SYSTEM', 'CRT']; // automatically load these
+          /* user specified */
+          for (var i=0; i<uses.length; i++) {
+            if (use_list.indexOf(uses[i]) < 0) {
+              use_list.push(use[i]);
+            }
+          }
+
+          for (var i=0; i<use_list.length; i++) {
+            var use = use_list[i],
+                rlib = require('./libs/' + use.toLowerCase()),
+                lib = new rlib.Library(st);
+            for (var prog in lib) {
+              if (lib.hasOwnProperty(prog) && prog !== '__init__') {
+                uses_lib_map[prog] = lib[prog];
+              }
+            }
+            uses_init_ir.push.apply(uses_init_ir, lib.__init__());
+            uses_stop_ir.push.apply(uses_stop_ir, lib.__stop__());
+          }
+        }
 
         // Regular formal parameters
         for (var i=0; i < fparams.length; i++) {
@@ -303,6 +309,7 @@ function IR(theAST) {
           }
           st.insert(fparam.id,{node:'var_decl',type:ftype,pname:pname,sname:sname,var:fparam.var,level:level});
         }
+
         // Evaluate the children. We might need to modify the
         // param-list based on internal variables that refer to higher
         // level lexical scope
@@ -336,6 +343,7 @@ function IR(theAST) {
         ir.push('');
         ir.push('define ' + pitype + ' @' + pdecl.name + '(' + param_list.join(", ") +') {');
         ir.push('entry:');
+        ir.push.apply(ir, uses_init_ir);
         // For functions, add the return parameter
         if (pdecl.ireturn) {
           ir.push('  %retval = alloca ' + pitype);
@@ -350,6 +358,7 @@ function IR(theAST) {
         } else {
           ir.push('  ret ' + pitype + ' 0');
         }
+        ir.push.apply(ir, uses_stop_ir);
         ir.push('}');
         break;
 

@@ -146,8 +146,8 @@ WHITESPACE              \s+
 
 %% /* language grammar */
 
-program         : program_header block DOT              {{ $$ = {node:'program',id:$1.id,
-                                                                 fparams:$1.fparams,uses:$1.uses,block:$2};
+program         : program_header block DOT              {{ $2.uses = $1.uses;
+                                                           $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$2};
                                                            if (typeof module !== 'undefined' && require.main === module) {
                                                              console.warn(inspect($$));
                                                            }
