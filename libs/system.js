@@ -4,6 +4,8 @@ function Library (st) {
   function __init__() {
     var ir = [];
     ir.push("declare i32 @printf(i8*, ...)");
+    ir.push("declare double @drand48()");
+    ir.push("declare i32 @lrand48()");
     ir.push("");
     ir.push('@.newline = private constant [2 x i8] c"\\0A\\00"');
     ir.push('@.true_str = private constant [5 x i8] c"TRUE\\00"');
@@ -70,7 +72,7 @@ function Library (st) {
   function WRITELN (ast, cparams) {
     var ir = [];
     ir.push.apply(ir, WRITE(ast, cparams));
-    v = vcnt++;
+    var v = vcnt++;
     ir.push('  ; WRITELN start');
     ir.push('  %str' + v + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
     ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ')');
@@ -94,10 +96,41 @@ function Library (st) {
     return ir;
   }
 
+  function RANDOM (ast, cparams) {
+    var ir = [],
+        clen = cparams.length, cparam,
+        v = vcnt++,
+        rcall = '%rcall' + v,
+        rconv = '%rconv' + v;
+
+    ir.push('  ; RANDOM start');
+    if (clen === 0) {
+        // Return a random Real 0 <= x < 1
+        ir.push('  ' + rcall + ' = call double @drand48()');
+        ir.push('  ' + rconv + ' = fptrunc double ' + rcall + ' to float');
+        ast.type = {node:'type',name:'REAL'};
+        ast.itype = 'float';
+        ast.ilocal = rconv;
+    } else if (clen === 1) {
+        // Return a random Integer 0 <= x < Num
+        cparam = cparams[0];
+        ir.push('  ' + rcall + ' = call i32 @lrand48()');
+        ir.push('  ' + rconv + ' = urem i32 ' + rcall + ', ' + cparam.ilocal);
+        ast.type = {node:'type',name:'INTEGER'};
+        ast.itype = 'i32';
+        ast.ilocal = rconv;
+    } else {
+      throw new Error("Random only accepts one or zero arguments (" + clen + " given)");
+    }
+    ir.push('  ; RANDOM finish');
+    return ir;
+  }
+
   return {__init__: __init__,
           CHR: CHR,
           WRITE:WRITE,
-          WRITELN:WRITELN
+          WRITELN:WRITELN,
+          RANDOM:RANDOM
           };
 };
 

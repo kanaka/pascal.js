@@ -16,9 +16,10 @@ TESTS ?= write1 write2 \
 	 for1 for2 \
 	 array1 array2 array4 array5 array6 array7 \
 	 record1 record2 record3 record4 \
-	 delay \
 	 book9-4 \
-	 qsort
+	 qsort \
+	 delay \
+	 random1 random2
 
 all: parse.js
 
@@ -29,7 +30,7 @@ clean:
 	rm $(BUILDDIR)/* parse.js
 
 
-TEST_DEPS = ir.js parse.js
+TEST_DEPS = ir.js parse.js libs/system.js libs/crt.js
 
 FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%)
 LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.ll)
@@ -39,14 +40,23 @@ LL_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out2)
 DIFFS=$(TESTS:%=$(BUILDDIR)/%.diff)
 
 $(FPC_OBJECTS): $(BUILDDIR)/%: $(TESTDIR)/%.pas $(TEST_DEPS)
-	fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"; \
+	@if [ -e $<.out ]; then \
+	    cp $<.out $@.out1; \
+	    touch $@.skip; \
+	else \
+	    echo 'fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"'; \
+	    fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"; \
+	fi
 
 $(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas $(TEST_DEPS)
 	node ir.js $< > $@
 
 # run the fpc executable translating floating point output
 $(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
-	$< | sed 's/\(\.[0-9][0-9][0-9][0-9][0-9][0-9]\)[0-9]*\(E[+-]\)0*\([0-9][0-9]\)/\1\2\3/g' > $@
+	@if [ ! -e $<.skip ]; then \
+	    echo '$< | sed 's/\(\.[0-9][0-9][0-9][0-9][0-9][0-9]\)[0-9]*\(E[+-]\)0*\([0-9][0-9]\)/\1\2\3/g' > $@'; \
+	    $< | sed 's/\(\.[0-9][0-9][0-9][0-9][0-9][0-9]\)[0-9]*\(E[+-]\)0*\([0-9][0-9]\)/\1\2\3/g' > $@; \
+	fi	
 
 $(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.ll
 	lli $< > $@
