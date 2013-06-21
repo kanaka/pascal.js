@@ -21,7 +21,7 @@ WHITESPACE              \s+
 <comment>"*"+[^)]       /* ignore '*" in comment that is not before ")" */
 <comment>"*)"           this.begin('INITIAL');
 
-"{".*"}"                /* skip whitespace */
+"{"[^}]*"}"                /* skip comment */
 
 /* Literals */
 {REAL}                  return "REAL_LITERAL";
@@ -266,6 +266,7 @@ cstmt           : BEGIN stmts END                       {{ $$ = $2; }}
                 ;
 stmts           : stmts SEMI stmt                       {{ $$ = $1.concat($3); }}
                 |            stmt                       {{ $$ = [$1]; }}
+                | /* none */                            {{ $$ = []; }}
                 ;
 stmt            : open_stmt                             {{ $$ = $1; }}
                 | closed_stmt                           {{ $$ = $1; }}
