@@ -109,6 +109,14 @@ function Library (st) {
     return ir;
   }
 
+  function SOUND(ast, cparams) {
+    return [];
+  }
+  
+  function NOSOUND(ast, cparams) {
+    return [];
+  }
+
 
   return {__init__: __init__,
           __stop__: __stop__,
@@ -118,8 +126,9 @@ function Library (st) {
           DELAY:DELAY,
           GOTOXY:GOTOXY,
           KEYPRESSED: KEYPRESSED,
-          READKEY: READKEY
-          };
+          READKEY: READKEY,
+          SOUND: SOUND,
+          NOSOUND: NOSOUND};
 };
 
 exports.Library = Library;
