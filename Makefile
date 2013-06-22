@@ -20,6 +20,7 @@ TESTS ?= write1 write2 \
 	 record1 record2 record3 record4 \
 	 book9-4 \
 	 qsort \
+	 halt \
 	 delay clrscr1 gotoxy1 keypressed1 \
 	 random1 random2
 

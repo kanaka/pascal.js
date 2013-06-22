@@ -1,9 +1,10 @@
 function Library (st) {
   function __init__() {
     var ir = [];
-    ir.push(["declare i32 @printf(i8*, ...)"]);
-    ir.push(["declare double @drand48()"]);
-    ir.push(["declare i32 @lrand48()"]);
+    ir.push(['declare i32 @printf(i8*, ...)']);
+    ir.push(['declare double @drand48()']);
+    ir.push(['declare i32 @lrand48()']);
+    ir.push(['declare void @exit(i32) noreturn nounwind']);
     ir.push([""]);
     //ir.push(['@.newline = private constant [3 x i8] c"\\0D\\0A\\00"']);
     ir.push(['@.newline = private constant [2 x i8] c"\\0A\\00"']);
@@ -110,6 +111,20 @@ function Library (st) {
     return ir;
   }
 
+  function HALT(ast, cparams) {
+    var ir = [], clen = cparams.length,
+        cparam = cparams[0],
+        lname = st.new_name('%char');
+    if (clen !== 1) {
+      throw new Error("HALT only accepts one argument (" + clen + " given)");
+    }
+    ir.push('  ; HALT start');
+    ir.push('  call void @exit(' + cparam.itype + ' ' + cparam.ilocal + ') noreturn nounwind');
+    ir.push('  unreachable');
+    ir.push('  ; HALT finish');
+    return ir;
+  }
+
   function RANDOM (ast, cparams) {
     var ir = [],
         clen = cparams.length, cparam,
@@ -143,6 +158,7 @@ function Library (st) {
   return {__init__: __init__,
           __stop__: __stop__,
           CHR: CHR,
+          HALT: HALT,
           WRITE:WRITE,
           WRITELN:WRITELN,
           RANDOM:RANDOM

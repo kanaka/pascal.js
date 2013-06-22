@@ -25,15 +25,13 @@ function Library (st) {
   }
 
   function CRTINIT(ast, cparams) {
-    var ir = [];
     // no-op
     return ir;
   }
 
   function CRTEXIT(ast, cparams) {
-    var ir = [];
     // no-op
-    return ir;
+    return [];
   }
 
   function CLRSCR (ast, cparams) {
