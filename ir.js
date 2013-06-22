@@ -492,11 +492,16 @@ function IR(theAST) {
             param_list.push(ltype.lltype + "* " + lparam.istack);
           }
           for(var i=0; i < cparams.length; i++) {
-            var cparam = cparams[i];
+            var cparam = cparams[i],
+                fparam = fparams[i];
             if (cparams[i].lparam) {
               throw new Error("TODO handle lparam in call");
-            } else if (fparams[i].var) {
+            } else if (fparam.var) {
               param_list.push(cparam.itype + "* " + cparam.istack);
+            } else if (fparam.type.name === 'STRING' && cparam.itype[0] === '[') {
+              // TODO: above check is ugly, should be better way to distinguish character array from i8* string
+              // coerce character array to i8*
+              param_list.push('i8* getelementptr inbounds (' + cparam.itype + ' ' + cparam.istack + ', i32 0, i32 0)');
             } else {
               param_list.push(cparam.itype + " " + cparam.ilocal);
             }

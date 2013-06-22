@@ -12,7 +12,7 @@ TESTS ?= write1 write2 \
 	 type1 type2 type3 \
 	 proc1 proc2 proc3 proc4 proc5 pfib \
 	 func1 ffib \
-	 string1 string2 \
+	 string1 string2 string3 string4 string5 \
 	 if1 if2 \
 	 nested1 nested2 nested3 nested4 \
 	 for1 for2 repeat1 while1 while2 \
