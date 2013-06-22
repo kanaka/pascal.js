@@ -1,2 +1,4 @@
 build/
 parse.js
+libs/kbd.ll
+libs/kbd.js

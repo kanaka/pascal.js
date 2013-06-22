@@ -1,6 +1,7 @@
 TESTDIR ?= tests
 BUILDDIR ?= build
 RUNLL ?= ./runll
+RUNFPC ?= ./runfpc
 
 TESTS ?= write1 write2 \
 	 expr1 expr2 \
@@ -19,19 +20,34 @@ TESTS ?= write1 write2 \
 	 record1 record2 record3 record4 \
 	 book9-4 \
 	 qsort \
-	 delay \
+	 delay clrscr1 gotoxy1 keypressed1 \
 	 random1 random2
 
-all: parse.js
+all: parse.js libs/kbd.js
+
+clean:
+	rm -f $(BUILDDIR)/* parse.js
+	rm -f libs/kbd.ll libs/kbd.js
 
 parse.js: parse.jison
 	jison parse.jison
 
-clean:
-	rm $(BUILDDIR)/* parse.js
+libs/kbd.js: libs/kbd.ll
+	echo "Munging $< into $@"
+	@echo "var llvm_ir = [" > $@; \
+	egrep -v "^target |declare.*@printf" $< | \
+	    sed -e "s@\\\\@\\\\\\\\@g" \
+	        -e "s/'/\\\\'/g" \
+		-e "s/^/'/" \
+		-e "s/$$/',/" >> $@; \
+	echo "];" >> $@; \
+	echo "exports.llvm_ir = llvm_ir;" >> $@
+
+libs/kbd.ll: libs/kbd.c
+	clang -emit-llvm $< -S -o $@
 
 
-TEST_DEPS = ir.js parse.js libs/system.js libs/crt.js
+TEST_DEPS = ir.js parse.js libs/system.js libs/crt.js libs/kbd.js
 
 FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%)
 LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.ll)
@@ -55,12 +71,23 @@ $(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas $(TEST_DEPS)
 # run the fpc executable translating floating point output
 $(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
 	@if [ ! -e $<.skip ]; then \
-	    echo '$< | sed 's/\(\.[0-9][0-9][0-9][0-9][0-9][0-9]\)[0-9]*\(E[+-]\)0*\([0-9][0-9]\)/\1\2\3/g' > $@'; \
-	    $< | sed 's/\(\.[0-9][0-9][0-9][0-9][0-9][0-9]\)[0-9]*\(E[+-]\)0*\([0-9][0-9]\)/\1\2\3/g' > $@; \
+	    if [ -e $(TESTDIR)/$*.pas.in ]; then \
+		echo '$(TESTDIR)/$*.pas.in | $(RUNFPC) $< > $@'; \
+		cat $(TESTDIR)/$*.pas.in | $(RUNFPC) $< > $@; \
+	    else \
+		echo '$(RUNFPC) $< > $@'; \
+		$(RUNFPC) $< > $@; \
+	    fi; \
 	fi	
 
 $(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.ll
-	$(RUNLL) $< > $@
+	@if [ -e $(TESTDIR)/$*.pas.in ]; then \
+	    echo 'cat $(TESTDIR)/$*.pas.in | $(RUNLL) $< > $@'; \
+	    cat $(TESTDIR)/$*.pas.in | $(RUNLL) $< > $@; \
+	else \
+	    echo '$(RUNLL) $< > $@'; \
+	    $(RUNLL) $< > $@; \
+	fi
 
 $(DIFFS): $(BUILDDIR)/%.diff: $(BUILDDIR)/%.out1 $(BUILDDIR)/%.out2
 	diff -u $^ > $@

@@ -10,7 +10,8 @@ function id(identifier) {
 }
 
 function SymbolTable() {
-  var data = [{}];
+  var data = [{}],
+      name_cnt = 0;
 
   function begin_scope() {
     data.push({});
@@ -55,6 +56,10 @@ function SymbolTable() {
     }
   }
 
+  function new_name(name) {
+    return name + "_" + (name_cnt++) + "_";
+  }
+
   function display() {
     console.warn("-------------");
     for(var idx = 0; idx < data.length; idx++) {
@@ -71,6 +76,7 @@ function SymbolTable() {
           replace: replace,
           begin_scope: begin_scope,
           end_scope: end_scope,
+          new_name: new_name,
           display: display};
 };
 
@@ -79,12 +85,7 @@ function IR(theAST) {
   var st = new SymbolTable();
   var uses_lib_map = {};
   var str_cnt = 0;
-  var name_cnt = 0;
   var expected_returned_type = 'NoTyp';
-
-  function new_name(name) {
-    return name + "_" + (name_cnt++) + "_";
-  }
 
   function expand_type(type) {
     var t = type;
@@ -195,11 +196,11 @@ function IR(theAST) {
 
     if (level === 0) {
       // global scope
-      var sname = "@" + new_name(id);
+      var sname = "@" + st.new_name(id);
       ir.push([sname + ' = common global ' + vtype.lltype + ' ' + vdef]);
     } else {
       // sub-program scope
-      var sname = "%" + new_name(id + "_stack");
+      var sname = "%" + st.new_name(id + "_stack");
       ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
       ir.push('  store ' + vtype.lltype + ' ' + vdef + ', ' + vtype.lltype + '* ' + sname);
     }
@@ -297,8 +298,8 @@ function IR(theAST) {
           var fparam = fparams[i],
               ftype = annotate_type(fparam.type),
               lltype = ftype.lltype,
-              pname = "%" + new_name(fparam.id + "_fparam"),
-              sname = "%" + new_name(fparam.id + "_fparam_stack");
+              pname = "%" + st.new_name(fparam.id + "_fparam"),
+              sname = "%" + st.new_name(fparam.id + "_fparam_stack");
           if (fparam.var) {
             vdecl_ir.push('  ' + pname + ' = load ' + lltype + '* ' + sname);
             param_list.push(lltype + '* ' + sname);
@@ -392,7 +393,7 @@ function IR(theAST) {
             type = ast.type,
             fparams = ast.fparams,
             block = ast.block,
-            new_fname = new_name(id),
+            new_fname = st.new_name(id),
             new_level = level+1;
 
         st.insert(id, {name: new_fname, type:type, level: new_level,fparams:fparams,lparams:[]});
@@ -431,21 +432,21 @@ function IR(theAST) {
         if (lvalue.type.name === 'CHARACTER' && expr.type.name === 'STRING') {
           // coerce string to character
           // TODO: assert that STRING is length of 1
-          var decay = '%' + new_name('arraydecay'),
-              chr = '%' + new_name('chr');
+          var decay = '%' + st.new_name('arraydecay'),
+              chr = '%' + st.new_name('chr');
           ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
           ir.push('  ' + chr + ' = load i8* ' + decay); 
           eitype = 'i8';
           eilocal = chr;
         } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING' && expr.val) {
           // string literal being assigned so coerce
-          var decay = '%' + new_name('arraydecay');
+          var decay = '%' + st.new_name('arraydecay');
           ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
           eitype = 'i8*';
           eilocal = decay;
         } else if (lvalue.type.name === 'REAL' && expr.type.name === 'INTEGER') {
           // coerce integer to real
-          var conv = new_name("%conv");
+          var conv = st.new_name("%conv");
           ir.push('  ' + conv + ' = sitofp i32 ' + expr.ilocal + ' to float');
           eitype = "float";
           eilocal = conv;
@@ -501,7 +502,7 @@ function IR(theAST) {
             }
           }
           if (node === 'expr_call') {
-            var ret = '%' + new_name(pdecl.name + "_ret"),
+            var ret = '%' + st.new_name(pdecl.name + "_ret"),
               ptype = annotate_type(pdecl.type),
               lltype = ptype.lltype;
             ir.push('  ' + ret + ' = call ' + lltype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
@@ -527,7 +528,7 @@ function IR(theAST) {
         ir.push('');
         ir.push('  ; if statement start');
         ir.push.apply(ir, toIR(expr,level,fnames));
-        var br_name = new_name('br'),
+        var br_name = st.new_name('br'),
             br_true = br_name + '_true',
             br_false = br_name + '_false',
             br_done = br_name + '_done';
@@ -553,7 +554,7 @@ function IR(theAST) {
             by = ast.by,
             end = ast.end,
             stmt = ast.stmt,
-            for_label = new_name('for'),
+            for_label = st.new_name('for'),
             for_start = for_label + 'start',
             for_cond = for_label + 'cond',
             for_body = for_label + 'body',
@@ -624,7 +625,7 @@ function IR(theAST) {
       case 'stmt_while':
         var expr = ast.expr,
             stmt = ast.stmt,
-            while_label = new_name('while'),
+            while_label = st.new_name('while'),
             while_cond = while_label + 'cond',
             while_body = while_label + 'body',
             while_end = while_label + 'end',
@@ -664,7 +665,7 @@ function IR(theAST) {
         var left = ast.left, ltype,
             right = ast.right, rtype,
             resType = null, op,
-            dest_name = '%' + new_name("binop"),
+            dest_name = '%' + st.new_name("binop"),
             boolLookup = {gt:'sgt',lt:'slt',
                           geq:'sge',leq:'sle',
                           eq:'eq',neq:'ne'},
@@ -737,13 +738,13 @@ function IR(theAST) {
           throw new Error("Unexpected expr_binop operand " + ast.op);
         }
         if (resType.name === 'REAL' && ltype.name === 'INTEGER') {
-          var conv = new_name("%conv");
+          var conv = st.new_name("%conv");
           ir.push('  ' + conv + ' = sitofp i32 ' + left.ilocal + ' to float');
           left.ilocal = conv;
           left.itype = 'float';
         }
         if (resType.name === 'REAL' && rtype.name === 'INTEGER') {
-          var conv = new_name("%conv");
+          var conv = st.new_name("%conv");
           ir.push('  ' + conv + ' = sitofp i32 ' + right.ilocal + ' to float');
           right.ilocal = conv;
           right.itype = 'float';
@@ -756,7 +757,7 @@ function IR(theAST) {
 
       case 'expr_unop':
         var expr = ast.expr,
-            dest_name = '%' + new_name("unop"),
+            dest_name = '%' + st.new_name("unop"),
             op;
         ir.push.apply(ir, toIR(expr,level,fnames));
         // TODO: real typechecking comparison
@@ -782,7 +783,7 @@ function IR(theAST) {
 
         var atype = lvalue.type,
             start = atype.index.start,
-            aname = '%' + new_name(deref_name(ast)),
+            aname = '%' + st.new_name(deref_name(ast)),
             aidx = aname + 'idx',
             aoff = aname + 'off',
             aval = aname + 'val';
@@ -802,7 +803,7 @@ function IR(theAST) {
         var cidx = lvalue.type.component_map[comp],
             ctype = lvalue.type.sections[cidx].type,
             clltype = ctype.lltype,
-            rname = '%' + new_name(deref_name(ast)),
+            rname = '%' + st.new_name(deref_name(ast)),
             roff = rname + '_off',
             rval = rname + '_val';
         ir.push('  ' + roff + ' = getelementptr inbounds ' + lvalue.itype + '* ' + lvalue.istack + ', i32 0, i32 ' + cidx);
@@ -879,7 +880,7 @@ function IR(theAST) {
         var id = ast.id,
             vtype = annotate_type(vdecl.type),
             vlevel = vdecl.level,
-            lname = "%" + new_name(id + "_local");
+            lname = "%" + st.new_name(id + "_local");
 
         // Add variables from a higher lexical scope to our current
         // subprogram param list
@@ -891,7 +892,7 @@ function IR(theAST) {
           for(var l = vlevel+1; l <= level; l++) {
             var fname = fnames[l],
                 pdecl = st.lookup(fname);
-            new_pname = "%" + new_name(id + "_lparam");
+            new_pname = "%" + st.new_name(id + "_lparam");
             new_sname = new_pname + "_stack";
             // replace vdecl and insert it at this level
             vdecl = {node:'var_decl',type:vtype,pname:new_pname,sname:new_sname,var:true,lparam:true,level:l};

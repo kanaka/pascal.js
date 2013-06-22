@@ -1,12 +1,11 @@
 function Library (st) {
-  var vcnt = 0;
-
   function __init__() {
     var ir = [];
     ir.push(["declare i32 @printf(i8*, ...)"]);
     ir.push(["declare double @drand48()"]);
     ir.push(["declare i32 @lrand48()"]);
     ir.push([""]);
+    //ir.push(['@.newline = private constant [3 x i8] c"\\0D\\0A\\00"']);
     ir.push(['@.newline = private constant [2 x i8] c"\\0A\\00"']);
     ir.push(['@.true_str = private constant [5 x i8] c"TRUE\\00"']);
     ir.push(['@.false_str = private constant [6 x i8] c"FALSE\\00"']);
@@ -26,7 +25,9 @@ function Library (st) {
     ir.push('  ; WRITE start');
     for(var i=0; i < cparams.length; i++) {
       var param = cparams[i],
-          v = vcnt++,
+          pre = st.new_name('WRITE'),
+          str = '%' + pre + 'str',
+          call = '%' + pre + 'call',
           format = null,
           flen = 3;
       switch (param.type.name) {
@@ -34,30 +35,36 @@ function Library (st) {
         case 'STRING':    format = "@.str_format"; break;
         case 'CHARACTER': format = "@.chr_format"; break;
         case 'REAL':
-          var conv = '%conv_' + v;
-          ir.push('  ' + conv + ' = fpext float ' + param.ilocal + ' to double');
+          var conv = '%' + pre + 'conv';
+          ir.push('  ' + conv +
+                  ' = fpext float ' + param.ilocal + ' to double');
           format = "@.float_format";
           flen = 4;
           param.itype = "double";
           param.ilocal = conv;
           break;
         case 'BOOLEAN':
-          var br_name = 'br' + v,
+          var br_name = pre + 'br',
               br_true = br_name + '_true',
               br_false = br_name + '_false',
               br_done = br_name + '_done',
-              bool_local1 = '%bool_local' + v + '_1',
-              bool_local2 = '%bool_local' + v + '_2',
-              bool_local_out = '%bool_local' + v + '_out';
-          ir.push('  br ' + param.itype + ' ' + param.ilocal + ', label %' + br_true + ', label %' + br_false);
+              bool_local1 = '%' + pre + 'bool_local_1',
+              bool_local2 = '%' + pre + 'bool_local_2',
+              bool_local_out = '%' + pre + 'bool_local_out';
+          ir.push('  br ' + param.itype + ' ' + param.ilocal +
+                  ', label %' + br_true + ', label %' + br_false);
           ir.push('  ' + br_true + ':');
-          ir.push('    ' + bool_local1 + ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0');
+          ir.push('    ' + bool_local1 +
+                  ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0');
           ir.push('  br label %' + br_done);
           ir.push('  ' + br_false + ':');
-          ir.push('    ' + bool_local2 + ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0');
+          ir.push('    ' + bool_local2 +
+                  ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0');
           ir.push('  br label %' + br_done);
           ir.push('  ' + br_done + ':');
-          ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 + ', %' + br_true + '], [ ' + bool_local2 + ', %' + br_false + ']');
+          ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 +
+                  ', %' + br_true + '], [ ' + bool_local2 +
+                  ', %' + br_false + ']');
           format = "@.str_format";
           param.itype = 'i8*';
           param.ilocal = bool_local_out;
@@ -65,21 +72,24 @@ function Library (st) {
         default:
           throw new Error("Unknown WRITE type: " + param.type.name);
       }
-      ir.push('  %str' + v + ' = getelementptr inbounds [' + flen + ' x i8]* ' + format + ', i32 0, i32 0');
-      ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ', ' +
-                param.itype + ' ' + param.ilocal + ')');
+      ir.push('  ' + str + ' = getelementptr inbounds [' + flen + ' x i8]* ' +
+              format + ', i32 0, i32 0');
+      ir.push('  ' + call + ' = call i32 (i8*, ...)* @printf(i8* ' + str +
+              ', ' + param.itype + ' ' + param.ilocal + ')');
     }
     ir.push('  ; WRITE finish');
     return ir;
   }
 
   function WRITELN (ast, cparams) {
-    var ir = [];
+    var ir = [],
+        pre = st.new_name('WRITELN'),
+        str = '%' + pre + 'str',
+        call = '%' + pre + 'call';
     ir.push.apply(ir, WRITE(ast, cparams));
-    var v = vcnt++;
     ir.push('  ; WRITELN start');
-    ir.push('  %str' + v + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
-    ir.push('  %call' + v + ' = call i32 (i8*, ...)* @printf(i8* %str' + v + ')');
+    ir.push('  ' + str + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
+    ir.push('  ' + call + ' = call i32 (i8*, ...)* @printf(i8* ' + str + ')');
     ir.push('  ; WRITELN finish');
     return ir;
   }
@@ -87,7 +97,7 @@ function Library (st) {
   function CHR (ast, cparams) {
     var ir = [], clen = cparams.length,
         cparam = cparams[0],
-        lname = "%char" + vcnt++;
+        lname = st.new_name('%char');
     if (clen !== 1) {
       throw new Error("Chr only accepts one argument (" + clen + " given)");
     }
@@ -103,26 +113,26 @@ function Library (st) {
   function RANDOM (ast, cparams) {
     var ir = [],
         clen = cparams.length, cparam,
-        v = vcnt++,
-        rcall = '%rcall' + v,
-        rconv = '%rconv' + v;
+        pre = st.new_name('RANDOM'),
+        call = '%' + pre + 'call',
+        conv = '%' + pre + 'conv';
 
     ir.push('  ; RANDOM start');
     if (clen === 0) {
         // Return a random Real 0 <= x < 1
-        ir.push('  ' + rcall + ' = call double @drand48()');
-        ir.push('  ' + rconv + ' = fptrunc double ' + rcall + ' to float');
+        ir.push('  ' + call + ' = call double @drand48()');
+        ir.push('  ' + conv + ' = fptrunc double ' + call + ' to float');
         ast.type = {node:'type',name:'REAL'};
         ast.itype = 'float';
-        ast.ilocal = rconv;
+        ast.ilocal = conv;
     } else if (clen === 1) {
         // Return a random Integer 0 <= x < Num
         cparam = cparams[0];
-        ir.push('  ' + rcall + ' = call i32 @lrand48()');
-        ir.push('  ' + rconv + ' = urem i32 ' + rcall + ', ' + cparam.ilocal);
+        ir.push('  ' + call + ' = call i32 @lrand48()');
+        ir.push('  ' + conv + ' = urem i32 ' + call + ', ' + cparam.ilocal);
         ast.type = {node:'type',name:'INTEGER'};
         ast.itype = 'i32';
-        ast.ilocal = rconv;
+        ast.ilocal = conv;
     } else {
       throw new Error("Random only accepts one or zero arguments (" + clen + " given)");
     }

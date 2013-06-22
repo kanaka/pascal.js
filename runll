@@ -1,3 +1,4 @@
 #!/bin/bash
 
-lli --load=libncurses.so.5 "$@"
+#lli --load=libncurses.so.5 "$@"
+lli "$@"
