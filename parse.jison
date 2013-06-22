@@ -275,14 +275,14 @@ closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assi
                 | id call_params                        {{ $$ = {node:'stmt_call',id:$1,call_params:$2}; }}
                 | lvalue                                {{ $$ = {node:'stmt_call',id:$1.id,call_params:[]}; }}
                 | cstmt                                 {{ $$ = {node:'stmt_compound',stmts:$1}; }}
-                | repeat_stmt                           {{ $$ = $1; }}
                 | closed_if_stmt                        {{ $$ = $1; }}
-                | closed_while_stmt                     {{ $$ = $1; }}
                 | closed_for_stmt                       {{ $$ = $1; }}
+                | repeat_stmt                           {{ $$ = $1; }}
+                | closed_while_stmt                     {{ $$ = $1; }}
                 ;
 open_stmt       : open_if_stmt                          {{ $$ = $1; }}
-                | open_while_stmt                       {{ $$ = $1; }}
                 | open_for_stmt                         {{ $$ = $1; }}
+                | open_while_stmt                       {{ $$ = $1; }}
                 ;
 repeat_stmt     : REPEAT stmts      UNTIL expr          {{ $$ = {node:'stmt_repeat',expr:$4,stmts:$2}; }}
                 | REPEAT stmts SEMI UNTIL expr          {{ $$ = {node:'stmt_repeat',expr:$5,stmts:$2}; }}

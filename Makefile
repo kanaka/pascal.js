@@ -15,7 +15,7 @@ TESTS ?= write1 write2 \
 	 string1 string2 \
 	 if1 if2 \
 	 nested1 nested2 nested3 nested4 \
-	 for1 for2 \
+	 for1 for2 repeat1 while1 while2 \
 	 array1 array2 array4 array5 array6 array7 \
 	 record1 record2 record3 record4 \
 	 book9-4 \

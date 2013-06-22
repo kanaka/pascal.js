@@ -560,12 +560,10 @@ function IR(theAST) {
             for_body = for_label + 'body',
             for_inc = for_label + 'inc',
             for_end = for_label + 'end',
-            for_index = '%' + for_label + 'index',
             for_cmp = '%' + for_label + 'cmp',
             for_cmp1 = '%' + for_label + 'cmp1',
             for_cmp2 = '%' + for_label + 'cmp2',
             for_inc1 = '%' + for_label + 'inc1',
-            for0 = '%' + for_label + '0',
             for1 = '%' + for_label + '1',
             for2 = '%' + for_label + '2',
             for3 = '%' + for_label + '3';
@@ -622,22 +620,45 @@ function IR(theAST) {
         ir.push('');
         break;
 
+      case 'stmt_repeat':
+        var expr = ast.expr,
+            stmts = ast.stmts,
+            repeat_label = st.new_name('repeat'),
+            repeat_cond = repeat_label + 'cond',
+            repeat_body = repeat_label + 'body',
+            repeat_end = repeat_label + 'end';
+
+        ir.push('');
+        ir.push('  ; repeat statement start');
+
+        ir.push('  br label %' + repeat_body); 
+
+        ir.push('');
+        ir.push('  ' + repeat_body + ':');
+        for (var i=0; i < stmts.length; i++) {
+          ir.push.apply(ir,toIR(stmts[i],level,fnames));
+        }
+        ir.push('  br label %' + repeat_cond);
+
+        ir.push('');
+        ir.push('  ' + repeat_cond + ':');
+        ir.push.apply(ir, toIR(expr,level,fnames));
+        ir.push('  br i1 ' + expr.ilocal + ', label %' + repeat_end + ', label %' + repeat_body);
+
+        ir.push('');
+        ir.push('  ' + repeat_end + ':');
+
+        ir.push('  ; repeat statement finish');
+        ir.push('');
+        break;
+
       case 'stmt_while':
         var expr = ast.expr,
             stmt = ast.stmt,
             while_label = st.new_name('while'),
             while_cond = while_label + 'cond',
             while_body = while_label + 'body',
-            while_end = while_label + 'end',
-            for_index = '%' + for_label + 'index',
-            for_cmp = '%' + for_label + 'cmp',
-            for_cmp1 = '%' + for_label + 'cmp1',
-            for_cmp2 = '%' + for_label + 'cmp2',
-            for_inc1 = '%' + for_label + 'inc1',
-            for0 = '%' + for_label + '0',
-            for1 = '%' + for_label + '1',
-            for2 = '%' + for_label + '2',
-            for3 = '%' + for_label + '3';
+            while_end = while_label + 'end';
 
         ir.push('');
         ir.push('  ; while statement start');
