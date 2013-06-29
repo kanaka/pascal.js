@@ -121,14 +121,13 @@ WHITESPACE              \s+
 /lex
 
 %{
-    var util = require("util");
     function inspect(obj) {
-        console.warn(util.inspect(obj,false,20));
-    }
-
-    function appendChild(node, child){
-      node.splice(node.length,0,child);
-      return node;
+        if (typeof module !== 'undefined') {
+            var util = require("util");
+            console.warn(util.inspect(obj,false,20));
+        } else {
+            console.warn(JSON.stringify(obj,null,4))
+        }
     }
 %}
 
@@ -148,8 +147,8 @@ WHITESPACE              \s+
 
 program         : program_header block DOT              {{ $2.uses = $1.uses;
                                                            $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$2};
-                                                           if (typeof module !== 'undefined' && require.main === module) {
-                                                             console.warn(inspect($$));
+                                                           if (require.main === module) {
+                                                             inspect($$);
                                                            }
                                                            return $$; }}
                 ;

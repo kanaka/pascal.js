@@ -2,10 +2,6 @@
  * Based on https://raw.github.com/zaach/floop.js/master/lib/lljsgen.js @ 4a981a2799
  */
 
-var util = require('util'),
-    Parse = require('./parse'),
-    ieee754 = require('./ieee754');
-
 function id(identifier) {
   return identifier.split('-').join('_').replace('?', '$');
 }
@@ -952,22 +948,28 @@ function IR(theAST) {
           getAST: function() { return theAST; }};
 }
 
-exports.IR = IR;
-exports.toIR = function (ast) {
-  var ir = new IR(ast);
-  return ir.normalizeIR(ir.toIR());
-};
-exports.main = function commonjsMain(args) {
-  if (!args[1]) {
-      console.log('Usage: '+args[0]+' FILE');
-      process.exit(1);
+if (typeof module !== 'undefined') {
+  var Parse = require('./parse'),
+      ieee754 = require('./ieee754');
+
+  exports.IR = IR;
+  exports.toIR = function (ast) {
+    var ir = new IR(ast);
+    return ir.normalizeIR(ir.toIR());
+  };
+
+  exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
+    }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8"),
+        ast = Parse.parser.parse(source);
+    console.log(exports.toIR(ast));
   }
-  var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8"),
-      ast = Parse.parser.parse(source);
-  console.log(exports.toIR(ast));
-}
-if (typeof module !== 'undefined' && require.main === module) {
-  exports.main(process.argv.slice(1));
+  if (require.main === module) {
+    exports.main(process.argv.slice(1));
+  }
 }
 
 // vim: expandtab:ts=2:sw=2:syntax=javascript
