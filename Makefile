@@ -50,27 +50,27 @@ libs/kbd.ll: libs/kbd.c
 
 TEST_DEPS = ir.js parse.js libs/system.js libs/crt.js libs/kbd.js
 
-FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%)
-LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.ll)
+FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.1)
+LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.2)
 FPC_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out1)
 LL_OUTPUT=$(TESTS:%=$(BUILDDIR)/%.out2)
 
 DIFFS=$(TESTS:%=$(BUILDDIR)/%.diff)
 
-$(FPC_OBJECTS): $(BUILDDIR)/%: $(TESTDIR)/%.pas $(TEST_DEPS)
+$(FPC_OBJECTS): $(BUILDDIR)/%.1: $(TESTDIR)/%.pas $(TEST_DEPS)
 	@if [ -e $<.out ]; then \
-	    cp $<.out $@.out1; \
+	    cp $<.out $(BUILDDIR)/$*.out1; \
 	    touch $@.skip; \
 	else \
-	    echo 'fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"'; \
-	    fpc -FE$(BUILDDIR) $< | egrep -v "Compiler version|Copyright|Target OS"; \
+	    echo 'fpc -FE$(BUILDDIR) -o$*.1 $< | egrep -v "Compiler version|Copyright|Target OS"'; \
+	    fpc -FE$(BUILDDIR) -o$*.1 $< | egrep -v "Compiler version|Copyright|Target OS"; \
 	fi
 
-$(LL_OBJECTS): $(BUILDDIR)/%.ll: $(TESTDIR)/%.pas $(TEST_DEPS)
-	node ir.js $< > $@
+$(LL_OBJECTS): $(BUILDDIR)/%.2: $(TESTDIR)/%.pas $(TEST_DEPS)
+	node compile.js $< $@
 
 # run the fpc executable translating floating point output
-$(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
+$(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%.1
 	@if [ ! -e $<.skip ]; then \
 	    if [ -e $(TESTDIR)/$*.pas.in ]; then \
 		echo '$(TESTDIR)/$*.pas.in | $(RUNFPC) $< > $@'; \
@@ -81,7 +81,7 @@ $(FPC_OUTPUT): $(BUILDDIR)/%.out1: $(BUILDDIR)/%
 	    fi; \
 	fi	
 
-$(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.ll
+$(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.2
 	@if [ -e $(TESTDIR)/$*.pas.in ]; then \
 	    echo 'cat $(TESTDIR)/$*.pas.in | $(RUNLL) $< > $@'; \
 	    cat $(TESTDIR)/$*.pas.in | $(RUNLL) $< > $@; \

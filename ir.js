@@ -3,6 +3,7 @@
  */
 
 var util = require('util'),
+    Parse = require('./parse'),
     ieee754 = require('./ieee754');
 
 function id(identifier) {
@@ -709,7 +710,7 @@ function IR(theAST) {
           var msgPrefix = "Operands for '" + ast.op + "' ";
           // Type-check
           if (ltype.name !== rtype.name) {
-            throw new Error(msgPrefix + "are not the same type");
+            throw new Error(msgPrefix + "are not the same type: " + JSON.stringify(ast));
           }
           if (ast.op in {gt:1,lt:1}) {
             // scalar, string
@@ -956,9 +957,17 @@ exports.toIR = function (ast) {
   var ir = new IR(ast);
   return ir.normalizeIR(ir.toIR());
 };
-if (typeof module !== 'undefined' && require.main === module) {
-  var ast = require('./parse').main(process.argv.slice(1));
+exports.main = function commonjsMain(args) {
+  if (!args[1]) {
+      console.log('Usage: '+args[0]+' FILE');
+      process.exit(1);
+  }
+  var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8"),
+      ast = Parse.parser.parse(source);
   console.log(exports.toIR(ast));
+}
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
 }
 
 // vim: expandtab:ts=2:sw=2:syntax=javascript
