@@ -25,6 +25,66 @@ function Library (st) {
       return [];
   }
 
+  function CHR (ast, cparams) {
+    var ir = [], clen = cparams.length,
+        cparam = cparams[0],
+        lname = st.new_name('%char');
+    if (clen !== 1) {
+      throw new Error("Chr only accepts one argument (" + clen + " given)");
+    }
+    ir.push('  ; CHR start');
+    ir.push('  ' + lname + ' = trunc ' + cparam.itype + ' ' + cparam.ilocal + ' to i8');
+    ir.push('  ; CHR finish');
+    ast.type = {node:'type',name:'CHARACTER'};
+    ast.itype = 'i8';
+    ast.ilocal = lname;
+    return ir;
+  }
+
+  function HALT(ast, cparams) {
+    var ir = [], clen = cparams.length,
+        cparam = cparams[0],
+        lname = st.new_name('%char');
+    if (clen !== 1) {
+      throw new Error("HALT only accepts one argument (" + clen + " given)");
+    }
+    ir.push('  ; HALT start');
+    ir.push('  call void @exit(' + cparam.itype + ' ' + cparam.ilocal + ') noreturn nounwind');
+    ir.push('  unreachable');
+    ir.push('  ; HALT finish');
+    return ir;
+  }
+
+  function RANDOM (ast, cparams) {
+    var ir = [],
+        clen = cparams.length, cparam,
+        pre = st.new_name('RANDOM'),
+        call = '%' + pre + 'call',
+        conv = '%' + pre + 'conv';
+
+    ir.push('  ; RANDOM start');
+    if (clen === 0) {
+        // Return a random Real 0 <= x < 1
+        ir.push('  ' + call + ' = call double @drand48()');
+        ir.push('  ' + conv + ' = fptrunc double ' + call + ' to float');
+        ast.type = {node:'type',name:'REAL'};
+        ast.itype = 'float';
+        ast.ilocal = conv;
+    } else if (clen === 1) {
+        // Return a random Integer 0 <= x < Num
+        cparam = cparams[0];
+        ir.push('  ' + call + ' = call i32 @lrand48()');
+        ir.push('  ' + conv + ' = urem i32 ' + call + ', ' + cparam.ilocal);
+        ast.type = {node:'type',name:'INTEGER'};
+        ast.itype = 'i32';
+        ast.ilocal = conv;
+    } else {
+      throw new Error("Random only accepts one or zero arguments (" + clen + " given)");
+    }
+    ir.push('  ; RANDOM finish');
+    return ir;
+  }
+
   function WRITE (ast, cparams) {
     var ir = [];
     ir.push('  ; WRITE start');
@@ -102,73 +162,13 @@ function Library (st) {
     return ir;
   }
 
-  function CHR (ast, cparams) {
-    var ir = [], clen = cparams.length,
-        cparam = cparams[0],
-        lname = st.new_name('%char');
-    if (clen !== 1) {
-      throw new Error("Chr only accepts one argument (" + clen + " given)");
-    }
-    ir.push('  ; CHR start');
-    ir.push('  ' + lname + ' = trunc ' + cparam.itype + ' ' + cparam.ilocal + ' to i8');
-    ir.push('  ; CHR finish');
-    ast.type = {node:'type',name:'CHARACTER'};
-    ast.itype = 'i8';
-    ast.ilocal = lname;
-    return ir;
-  }
-
-  function HALT(ast, cparams) {
-    var ir = [], clen = cparams.length,
-        cparam = cparams[0],
-        lname = st.new_name('%char');
-    if (clen !== 1) {
-      throw new Error("HALT only accepts one argument (" + clen + " given)");
-    }
-    ir.push('  ; HALT start');
-    ir.push('  call void @exit(' + cparam.itype + ' ' + cparam.ilocal + ') noreturn nounwind');
-    ir.push('  unreachable');
-    ir.push('  ; HALT finish');
-    return ir;
-  }
-
-  function RANDOM (ast, cparams) {
-    var ir = [],
-        clen = cparams.length, cparam,
-        pre = st.new_name('RANDOM'),
-        call = '%' + pre + 'call',
-        conv = '%' + pre + 'conv';
-
-    ir.push('  ; RANDOM start');
-    if (clen === 0) {
-        // Return a random Real 0 <= x < 1
-        ir.push('  ' + call + ' = call double @drand48()');
-        ir.push('  ' + conv + ' = fptrunc double ' + call + ' to float');
-        ast.type = {node:'type',name:'REAL'};
-        ast.itype = 'float';
-        ast.ilocal = conv;
-    } else if (clen === 1) {
-        // Return a random Integer 0 <= x < Num
-        cparam = cparams[0];
-        ir.push('  ' + call + ' = call i32 @lrand48()');
-        ir.push('  ' + conv + ' = urem i32 ' + call + ', ' + cparam.ilocal);
-        ast.type = {node:'type',name:'INTEGER'};
-        ast.itype = 'i32';
-        ast.ilocal = conv;
-    } else {
-      throw new Error("Random only accepts one or zero arguments (" + clen + " given)");
-    }
-    ir.push('  ; RANDOM finish');
-    return ir;
-  }
-
   return {__init__: __init__,
           __stop__: __stop__,
           CHR: CHR,
           HALT: HALT,
+          RANDOM:RANDOM,
           WRITE:WRITE,
-          WRITELN:WRITELN,
-          RANDOM:RANDOM
+          WRITELN:WRITELN
           };
 };
 
