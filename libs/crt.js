@@ -100,7 +100,7 @@ function Library (st) {
         res = st.new_name('%res');
 
     ir.push('  ; READKEY start');
-    ir.push('  ' + call + ' = call i32 @readchar()');
+    ir.push('  ' + call + ' = call i32 @readkey()');
     ir.push('  ' + res + ' = trunc i32 ' + call + ' to i8');
     ast.type = {node:'type',name:'CHARACTER'};
     ast.itype = "i8";

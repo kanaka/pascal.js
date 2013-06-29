@@ -53,15 +53,37 @@ int kbd_pending()
     return select(1, &fds, NULL, NULL, &tv);
 }
 
-int readchar()
+// A pascal compatible readkey function that returns 0 if there is a pending
+// escape code and translates escape codes to Pascal keyscan numbers. The
+// keyscan mapping is based on fpc/rtl/inc/keyscan.inc
+int escape_state = 0; // 0, 27
+int readkey()
 {
     int sz;
     unsigned char c;
-    if (read(0, &c, 1) < 1) {
+
+    if ((sz = read(0, &c, 1)) < 1) {
         return -1;
-    } else {
-        return c;
     }
+    if (escape_state == 27 && (c == 79 || c == 91)) {
+        escape_state = 0;
+        c = readkey();
+        // TODO: more mappings
+        switch (c) {
+            // Arrow keys
+            case 0x41: c = 0x48; break; // up
+            case 0x42: c = 0x50; break; // down
+            case 0x43: c = 0x4d; break; // right
+            case 0x44: c = 0x4b; break; // left
+        }
+    } else if (escape_state == 27) {
+        escape_state = 0;
+        // TODO: key mapping
+    } else if (c == 27 && kbd_pending()) {
+        escape_state = 27;
+        c = 0;
+    }
+    return c;
 }
 
 #ifdef KBD_MAIN
@@ -71,14 +93,14 @@ int main()
     struct termios *save_termios;
     char c;
 
-    printf("Press a key\n");
-
     save_termios = termios_raw();
 
-    while (!kbd_pending()) {
+    printf("Press keys to show codes, or q to exit\r\n");
+    while (1) {
+        c = readkey();
+        printf("got character value: %d\r\n", c);
+        if (c == 113) { break; }
     }
-    c = readchar();
     termios_restore(save_termios);
-    printf("got character: %c\n", c);
 }
 #endif

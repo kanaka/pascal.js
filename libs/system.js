@@ -5,7 +5,11 @@ function Library (st) {
     ir.push(['declare double @drand48()']);
     ir.push(['declare i32 @lrand48()']);
     ir.push(['declare void @exit(i32) noreturn nounwind']);
-    ir.push([""]);
+    ir.push(['']);
+    ir.push(['%struct._IO_FILE = type { i32, i8* }']);
+    ir.push(['@stdout = external global %struct._IO_FILE*']);
+    ir.push(['declare i32 @fflush(%struct._IO_FILE*)']);
+    ir.push(['']);
     //ir.push(['@.newline = private constant [3 x i8] c"\\0D\\0A\\00"']);
     ir.push(['@.newline = private constant [2 x i8] c"\\0A\\00"']);
     ir.push(['@.true_str = private constant [5 x i8] c"TRUE\\00"']);
@@ -28,7 +32,9 @@ function Library (st) {
       var param = cparams[i],
           pre = st.new_name('WRITE'),
           str = '%' + pre + 'str',
-          call = '%' + pre + 'call',
+          sout = '%' + pre + 'sout',
+          call1 = '%' + pre + 'call1',
+          call2 = '%' + pre + 'call2',
           format = null,
           flen = 3;
       switch (param.type.name) {
@@ -75,9 +81,11 @@ function Library (st) {
       }
       ir.push('  ' + str + ' = getelementptr inbounds [' + flen + ' x i8]* ' +
               format + ', i32 0, i32 0');
-      ir.push('  ' + call + ' = call i32 (i8*, ...)* @printf(i8* ' + str +
+      ir.push('  ' + call1 + ' = call i32 (i8*, ...)* @printf(i8* ' + str +
               ', ' + param.itype + ' ' + param.ilocal + ')');
     }
+    ir.push('  ' + sout + ' = load %struct._IO_FILE** @stdout');
+    ir.push('  ' + call2 + ' = call i32 @fflush(%struct._IO_FILE* ' + sout + ')');
     ir.push('  ; WRITE finish');
     return ir;
   }
@@ -87,10 +95,9 @@ function Library (st) {
         pre = st.new_name('WRITELN'),
         str = '%' + pre + 'str',
         call = '%' + pre + 'call';
-    ir.push.apply(ir, WRITE(ast, cparams));
     ir.push('  ; WRITELN start');
-    ir.push('  ' + str + ' = getelementptr inbounds [2 x i8]* @.newline, i32 0, i32 0');
-    ir.push('  ' + call + ' = call i32 (i8*, ...)* @printf(i8* ' + str + ')');
+    ir.push.apply(ir, WRITE(ast, cparams));
+    ir.push.apply(ir, WRITE(ast, [{type:{name: 'STRING'},itype:'[2 x i8]*',ilocal:'@.newline'}]));
     ir.push('  ; WRITELN finish');
     return ir;
   }
