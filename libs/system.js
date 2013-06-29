@@ -25,20 +25,25 @@ function Library (st) {
       return [];
   }
 
-  function CHR (ast, cparams) {
+  function CHAR(ast, cparams) {
     var ir = [], clen = cparams.length,
+        id = ast.id,
         cparam = cparams[0],
         lname = st.new_name('%char');
     if (clen !== 1) {
-      throw new Error("Chr only accepts one argument (" + clen + " given)");
+      throw new Error(id + " only accepts one argument (" + clen + " given)");
     }
-    ir.push('  ; CHR start');
+    ir.push('  ; ' + id + ' start');
     ir.push('  ' + lname + ' = trunc ' + cparam.itype + ' ' + cparam.ilocal + ' to i8');
-    ir.push('  ; CHR finish');
+    ir.push('  ; ' + id + ' finish');
     ast.type = {node:'type',name:'CHARACTER'};
     ast.itype = 'i8';
     ast.ilocal = lname;
     return ir;
+  }
+
+  function CHR(ast, cparams) {
+    return CHAR(ast, cparams);
   }
 
   function HALT(ast, cparams) {
@@ -52,6 +57,24 @@ function Library (st) {
     ir.push('  call void @exit(' + cparam.itype + ' ' + cparam.ilocal + ') noreturn nounwind');
     ir.push('  unreachable');
     ir.push('  ; HALT finish');
+    return ir;
+  }
+
+  function INTEGER(ast, cparams) {
+    var ir = [], clen = cparams.length,
+        cparam = cparams[0],
+        lname = st.new_name('%int');
+    if (clen !== 1) {
+      throw new Error("INTEGER only accepts one argument (" + clen + " given)");
+    }
+    if (cparam.type.name === 'CHARACTER') {
+        ir.push('  ' + lname + ' = zext i8 ' + cparam.ilocal + ' to i32');
+        ast.type = {node:'type',name:'INTEGER'};
+        ast.itype = 'i32';
+        ast.ilocal = lname;
+    } else {
+        throw new Error("TODO: convert " + cparam.type.name + " to INTEGER");
+    }
     return ir;
   }
 
@@ -164,8 +187,10 @@ function Library (st) {
 
   return {__init__: __init__,
           __stop__: __stop__,
+          CHAR: CHAR,
           CHR: CHR,
           HALT: HALT,
+          INTEGER: INTEGER,
           RANDOM:RANDOM,
           WRITE:WRITE,
           WRITELN:WRITELN

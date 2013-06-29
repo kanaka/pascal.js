@@ -333,6 +333,8 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                 | expr GEQ expr                         {{ $$ = {node:'expr_binop',op:'geq',left:$1,right:$3}; }}
                 | expr LEQ expr                         {{ $$ = {node:'expr_binop',op:'leq',left:$1,right:$3}; }}
                 | expr NEQ expr                         {{ $$ = {node:'expr_binop',op:'neq',left:$1,right:$3}; }}
+                | INTEGER call_params                   {{ $$ = {node:'expr_call',id:$1.toUpperCase(),call_params:$2}; }}
+                | CHAR call_params                      {{ $$ = {node:'expr_call',id:$1.toUpperCase(),call_params:$2}; }}
                 | lvalue call_params                    {{ $$ = {node:'expr_call',id:$1.id,call_params:$2}; }}
                 ;
 
