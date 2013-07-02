@@ -1,6 +1,8 @@
 // CRT library implemented using VT100 escape sequences
 // http://ascii-table.com/ansi-escape-sequences-vt-100.php
 
+"use strict";
+
 function CRT (st) {
   var kbd = require("./kbd.js");
 

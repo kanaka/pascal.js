@@ -1,5 +1,7 @@
 // Basic builtin routines
 
+"use strict";
+
 function SYSTEM (st) {
   function __init__() {
     var ir = [];

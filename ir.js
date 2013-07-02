@@ -2,6 +2,8 @@
  * Based on https://raw.github.com/zaach/floop.js/master/lib/lljsgen.js @ 4a981a2799
  */
 
+"use strict";
+
 function id(identifier) {
   return identifier.split('-').join('_').replace('?', '$');
 }
