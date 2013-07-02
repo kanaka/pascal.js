@@ -6,6 +6,10 @@ function id(identifier) {
   return identifier.split('-').join('_').replace('?', '$');
 }
 
+function isNode() {
+  return typeof process === 'object' && typeof require === 'function';
+}
+
 function SymbolTable() {
   var data = [{}],
       name_cnt = 0;
@@ -80,9 +84,47 @@ function SymbolTable() {
 function IR(theAST) {
 
   var st = new SymbolTable();
-  var uses_lib_map = {};
+  var default_units = [];
+  var unit_map = {};
   var str_cnt = 0;
   var expected_returned_type = 'NoTyp';
+
+  // automatically loaded units depends on environment
+  if (isNode()) {
+    // Node.js
+    var default_units = ['SYSTEM', 'CRT'];
+  } else {
+    // Browser
+    var default_units = ['SYSTEM'];
+  }
+
+  function load_unit(unit) {
+    var lib = null,
+        unit_path = './libs/' + unit.toLowerCase() + ".js",
+        unit_name = unit.toUpperCase();
+    if (isNode()) {
+      // Node.js
+      var rlib = require(unit_path),
+      lib = new rlib[unit_name](st);
+    } else if (typeof window[unit_name] !== 'undefined') {
+      // Browser - already loaded
+      console.log("unit_name: " + unit_name);
+      lib = new window[unit_name](st);
+    } else {
+      // Browser - Synchronous AJAX request
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', unit_path, false);
+      xhr.send(null);
+      blah = xhr.responseText;
+      lib = new (eval(xhr.responseText))(st);
+    }
+    for (var prog in lib) {
+      if (lib.hasOwnProperty(prog) && prog !== '__init__') {
+        unit_map[prog] = lib[prog];
+      }
+    }
+    return lib;
+  }
 
   function expand_type(type) {
     var t = type;
@@ -241,7 +283,6 @@ function IR(theAST) {
     switch (node) {
       case 'program':
         var name = ast.id,  // TODO: do anything with program name?
-            uses = ast.uses,
             fparams = ast.fparams,
             block = ast.block;
         st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
@@ -260,33 +301,29 @@ function IR(theAST) {
             fparams = pdecl.fparams,
             param_list = [],
             lparam_list = [],
-            uses_init_ir = [],
-            uses_stop_ir = [],
+            unit_init_ir = [],
+            unit_stop_ir = [],
             pdecl_ir = [],
             vdecl_ir = [],
             stmts_ir = [];
 
         /* Evaluate libraries specified in the 'uses' declaration */
         if (uses) {
-          var use_list = ['SYSTEM', 'CRT']; // automatically load these
+          // Loaded by default
+          var unit_list = default_units.slice();
+
           /* user specified */
           for (var i=0; i<uses.length; i++) {
-            if (use_list.indexOf(uses[i]) < 0) {
-              use_list.push(use[i]);
+            if (unit_list.indexOf(uses[i]) < 0) {
+              unit_list.push(uses[i]);
             }
           }
 
-          for (var i=0; i<use_list.length; i++) {
-            var use = use_list[i],
-                rlib = require('./libs/' + use.toLowerCase()),
-                lib = new rlib.Library(st);
-            for (var prog in lib) {
-              if (lib.hasOwnProperty(prog) && prog !== '__init__') {
-                uses_lib_map[prog] = lib[prog];
-              }
-            }
-            uses_init_ir.push.apply(uses_init_ir, lib.__init__());
-            uses_stop_ir.push.apply(uses_stop_ir, lib.__stop__());
+          for (var i=0; i<unit_list.length; i++) {
+            var unit = unit_list[i],
+                lib = load_unit(unit);
+            unit_init_ir.push.apply(unit_init_ir, lib.__init__());
+            unit_stop_ir.push.apply(unit_stop_ir, lib.__stop__());
           }
         }
 
@@ -341,7 +378,7 @@ function IR(theAST) {
         ir.push('');
         ir.push('define ' + pitype + ' @' + pdecl.name + '(' + param_list.join(", ") +') {');
         ir.push('entry:');
-        ir.push.apply(ir, uses_init_ir);
+        ir.push.apply(ir, unit_init_ir);
         // For functions, add the return parameter
         if (pdecl.ireturn) {
           ir.push('  %retval = alloca ' + pitype);
@@ -356,7 +393,7 @@ function IR(theAST) {
         } else {
           ir.push('  ret ' + pitype + ' 0');
         }
-        ir.push.apply(ir, uses_stop_ir);
+        ir.push.apply(ir, unit_stop_ir);
         ir.push('}');
         break;
 
@@ -470,8 +507,8 @@ function IR(theAST) {
           // length and types
           ir.push.apply(ir, toIR(cparam,level,fnames));
         }
-        if (typeof uses_lib_map[id] === 'function') {
-          ir.push.apply(ir, uses_lib_map[id](ast, cparams));
+        if (typeof unit_map[id] === 'function') {
+          ir.push.apply(ir, unit_map[id](ast, cparams));
         } else {
           try {
             var pdecl = st.lookup(id);
@@ -889,7 +926,7 @@ function IR(theAST) {
         }
 
         if ((vdecl && vdecl.fparams) ||
-            (typeof uses_lib_map[ast.id] === "function")) {
+            (typeof unit_map[ast.id] === "function")) {
           // This is actually a function call expression so
           // replace the AST with a function and evalutate it
           ast.node = 'expr_call';
@@ -943,7 +980,8 @@ function IR(theAST) {
     return ir;
   }
 
-  return {toIR: toIR, normalizeIR: normalizeIR,
+  return {toIR: toIR,
+          normalizeIR: normalizeIR,
           displayST: function() { st.display(); },
           getAST: function() { return theAST; }};
 }

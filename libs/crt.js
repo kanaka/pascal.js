@@ -1,7 +1,7 @@
 // CRT library implemented using VT100 escape sequences
 // http://ascii-table.com/ansi-escape-sequences-vt-100.php
 
-function Library (st) {
+function CRT (st) {
   var kbd = require("./kbd.js");
 
   function __init__() {
@@ -131,4 +131,4 @@ function Library (st) {
           NOSOUND: NOSOUND};
 };
 
-exports.Library = Library;
+exports.CRT = CRT;

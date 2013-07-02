@@ -1,4 +1,6 @@
-function Library (st) {
+// Basic builtin routines
+
+function SYSTEM (st) {
   function __init__() {
     var ir = [];
     ir.push(['declare i32 @printf(i8*, ...)']);
@@ -197,4 +199,8 @@ function Library (st) {
           };
 };
 
-exports.Library = Library;
+if (typeof module !== 'undefined') {
+    exports.SYSTEM = SYSTEM;
+} else {
+    SYSTEM;
+}

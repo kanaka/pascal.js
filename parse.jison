@@ -121,8 +121,12 @@ WHITESPACE              \s+
 /lex
 
 %{
+    function isNode() {
+      return typeof process === 'object' && typeof require === 'function';
+    }
+
     function inspect(obj) {
-        if (typeof module !== 'undefined') {
+        if (isNode()) {
             var util = require("util");
             console.warn(util.inspect(obj,false,20));
         } else {
@@ -147,7 +151,7 @@ WHITESPACE              \s+
 
 program         : program_header block DOT              {{ $2.uses = $1.uses;
                                                            $$ = {node:'program',id:$1.id,fparams:$1.fparams,block:$2};
-                                                           if (require.main === module) {
+                                                           if (isNode() && require.main === module) {
                                                              inspect($$);
                                                            }
                                                            return $$; }}
