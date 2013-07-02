@@ -11,9 +11,9 @@ function CRT (st) {
     ir.push(['@.vt100.movevh = private constant [9 x i8] c"\\1B[%d;%dH\\00"']);
     ir.push(['@.vt100.clearscreen = private constant [5 x i8] c"\\1B[2J\\00"']);
     ir.push(['']);
-    ir.push(['; libs/kbd.c start']);
+    ir.push(['; kbd.c start']);
     ir.push([kbd.llvm_ir.join("\n")]);
-    ir.push(['; libs/kbd.c finish']);
+    ir.push(['; kbd.c finish']);
     ir.push(['']);
 
     ir.push('  ' + call + ' = call %struct.termios* @termios_raw()');

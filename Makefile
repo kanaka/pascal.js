@@ -24,16 +24,16 @@ TESTS ?= write1 write2 \
 	 delay clrscr1 gotoxy1 keypressed1 \
 	 random1 random2
 
-all: parse.js libs/kbd.js
+all: parse.js units/kbd.js
 
 clean:
 	rm -f $(BUILDDIR)/* parse.js
-	rm -f libs/kbd.ll libs/kbd.js
+	rm -f units/kbd.ll units/kbd.js
 
 parse.js: parse.jison
 	jison parse.jison
 
-libs/kbd.js: libs/kbd.ll
+units/kbd.js: units/kbd.ll
 	echo "Munging $< into $@"
 	@echo "var llvm_ir = [" > $@; \
 	egrep -v "^target |declare.*@printf" $< | \
@@ -44,11 +44,11 @@ libs/kbd.js: libs/kbd.ll
 	echo "];" >> $@; \
 	echo "exports.llvm_ir = llvm_ir;" >> $@
 
-libs/kbd.ll: libs/kbd.c
+units/kbd.ll: units/kbd.c
 	clang -emit-llvm $< -S -o $@
 
 
-TEST_DEPS = ir.js parse.js libs/system.js libs/crt.js libs/kbd.js
+TEST_DEPS = ir.js parse.js units/system.js units/crt.js units/kbd.js
 
 FPC_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.1)
 LL_OBJECTS=$(TESTS:%=$(BUILDDIR)/%.2)

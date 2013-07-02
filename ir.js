@@ -100,7 +100,7 @@ function IR(theAST) {
 
   function load_unit(unit) {
     var lib = null,
-        unit_path = './libs/' + unit.toLowerCase() + ".js",
+        unit_path = './units/' + unit.toLowerCase() + ".js",
         unit_name = unit.toUpperCase();
     if (isNode()) {
       // Node.js
@@ -115,7 +115,6 @@ function IR(theAST) {
       var xhr = new XMLHttpRequest();
       xhr.open('GET', unit_path, false);
       xhr.send(null);
-      blah = xhr.responseText;
       lib = new (eval(xhr.responseText))(st);
     }
     for (var prog in lib) {
