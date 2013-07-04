@@ -4,6 +4,7 @@ RUNLL ?= ./runll
 RUNFPC ?= ./runfpc
 
 TESTS ?= write1 write2 \
+	 read1 read2 read3 read4 \
 	 expr1 expr2 \
 	 float1 \
 	 bool1 \
@@ -33,10 +34,11 @@ clean:
 parse.js: parse.jison
 	jison parse.jison
 
+# Remove declarations that will also be declared in units
 units/kbd.js: units/kbd.ll
 	echo "Munging $< into $@"
 	@echo "var llvm_ir = [" > $@; \
-	egrep -v "^target |declare.*@printf" $< | \
+	egrep -v "^target |^@stdout =|declare.*@fflush|declare.*@printf|struct._IO_FILE =" $< | \
 	    sed -e "s@\\\\@\\\\\\\\@g" \
 	        -e "s/'/\\\\'/g" \
 		-e "s/^/'/" \

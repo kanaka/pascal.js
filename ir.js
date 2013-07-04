@@ -85,11 +85,10 @@ function SymbolTable() {
 
 function IR(theAST) {
 
-  var st = new SymbolTable();
-  var default_units = [];
-  var unit_map = {};
-  var str_cnt = 0;
-  var expected_returned_type = 'NoTyp';
+  var st = new SymbolTable(),
+      default_units = [],
+      unit_map = {},
+      str_cnt = 0;
 
   // automatically loaded units depends on environment
   if (isNode()) {
@@ -99,6 +98,9 @@ function IR(theAST) {
     // Browser
     var default_units = ['SYSTEM'];
   }
+
+  // Store global settings in the symbol table
+  st.insert('_settings_', {});
 
   function load_unit(unit) {
     var lib = null,

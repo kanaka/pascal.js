@@ -7,6 +7,7 @@
 #include <sys/select.h> // select, FD_*
 #define __GNUC__ __SAVE_GNUC__
 
+#include <stdio.h>   // sscanf
 #include <stdlib.h>  // on_exit
 #include <termios.h>
 
@@ -86,8 +87,55 @@ int readkey()
     return c;
 }
 
-#ifdef KBD_MAIN
-#include <stdio.h>
+// read a string into dst until whitespace is detected. len is the maximum
+// number of characters that can be read
+int readstr(char * dst, int len) {
+    int idx = 0, done = 0;
+    unsigned int c;
+    if (len == 0) {
+        return 0;
+    }
+    while (idx < len - 1) {
+        c = readkey();
+        switch (c) {
+            case -1:
+            case 8:  // tab
+            case 10: // line feed
+            case 13: // carriage return
+            case 32: // space
+                done = 1;
+                break;
+            default:
+                dst[idx] = c;
+                idx++;
+        }
+        // echo typing
+        if (isatty(0) && c > 0) {
+            if (c == 10 || c == 13) {
+                printf("\n");
+            } else {
+                printf("%c", c);
+            }
+            fflush(stdout);
+        }
+        if (done) {
+            break;
+        }
+    }
+    dst[idx] = '\0';
+    return idx;
+}
+
+// Like sscanf but works on the raw terminal and is limited to a single input
+// argument pointer. Passing more than one conversion specification in the
+// format string will cause undefined behavior.
+int raw_scanf(char * format, void * ptr) {
+    char str[256];
+    readstr(str, sizeof(str));
+    return sscanf(str, format, ptr);
+}
+
+#ifdef KBD_MAIN1
 int main()
 {
     struct termios *save_termios;
@@ -95,12 +143,26 @@ int main()
 
     save_termios = termios_raw();
 
-    printf("Press keys to show codes, or q to exit\r\n");
+    printf("Press keys to show codes, or q to exit\n");
     while (1) {
         c = readkey();
-        printf("got character value: %d\r\n", c);
+        printf("got character value: %d\n", c);
         if (c == 113) { break; }
     }
+    termios_restore(save_termios);
+}
+#endif
+
+#ifdef KBD_MAIN2
+int main()
+{
+    struct termios *save_termios;
+    save_termios = termios_raw();
+
+    int i, j;
+    raw_scanf("%d", &i);
+    raw_scanf("%d", &j);
+    printf("read integers %d and %d\n", i, j);
     termios_restore(save_termios);
 }
 #endif

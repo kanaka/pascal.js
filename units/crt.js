@@ -8,7 +8,14 @@ function CRT (st) {
 
   function __init__() {
     var ir = [],
-        call = st.new_name("%call");
+        call = st.new_name("%call"),
+        settings = st.lookup('_settings_');
+
+    // use scanf that works with raw termios mode
+    settings.scanf_name = 'raw_scanf';
+    settings.scanf_var_args = false;
+    st.insert('_settings_', settings);
+
     ir.push(['declare i32 @usleep(i32)']);
     ir.push(['@.vt100.movevh = private constant [9 x i8] c"\\1B[%d;%dH\\00"']);
     ir.push(['@.vt100.clearscreen = private constant [5 x i8] c"\\1B[2J\\00"']);

@@ -4,8 +4,18 @@
 
 function SYSTEM (st) {
   function __init__() {
-    var ir = [];
+    var ir = [],
+        settings = st.lookup('_settings_');
+
+    // set default scanf function
+    if (!settings.scanf_name) {
+        settings.scanf_name = 'scanf';
+        settings.scanf_var_args = true;
+        st.insert('_settings_', settings);
+    }
+
     ir.push(['declare i32 @printf(i8*, ...)']);
+    ir.push(['declare i32 @scanf(i8*, ...)']);
     ir.push(['declare double @drand48()']);
     ir.push(['declare i32 @lrand48()']);
     ir.push(['declare void @exit(i32) noreturn nounwind']);
@@ -82,7 +92,7 @@ function SYSTEM (st) {
     return ir;
   }
 
-  function RANDOM (ast, cparams) {
+  function RANDOM(ast, cparams) {
     var ir = [],
         clen = cparams.length, cparam,
         pre = st.new_name('RANDOM'),
@@ -112,7 +122,46 @@ function SYSTEM (st) {
     return ir;
   }
 
-  function WRITE (ast, cparams) {
+  function READ(ast, cparams) {
+    var ir = [];
+    ir.push('  ; READ start');
+    for(var i=0; i < cparams.length; i++) {
+      var param = cparams[i],
+          settings = st.lookup('_settings_'),
+          scanf_name = settings.scanf_name,
+          scanf_var_args = settings.scanf_var_args,
+          pre = st.new_name('READ'),
+          str = '%' + pre + 'str',
+          call = '%' + pre + 'call',
+          cast = '%' + pre + 'cast',
+          format = null,
+          flen = 3;
+      switch (param.type.name) {
+        case 'INTEGER':   format = "@.int_format"; break;
+        case 'CHARACTER': format = "@.chr_format"; break;
+        default:
+          throw new Error("Unknown READ type: " + param.type.name);
+      }
+      ir.push('  ' + str + ' = getelementptr inbounds [' + flen + ' x i8]* ' +
+              format + ', i32 0, i32 0');
+      if (scanf_var_args) {
+        ir.push('  ' + call + ' = call i32 (i8*, ...)* @' + scanf_name +
+                '(i8* ' + str + ', ' + param.itype + '* ' + param.istack + ')');
+      } else {
+          ir.push('  ' + cast + ' = bitcast ' + param.itype + '* ' + param.istack + ' to i8*');
+          ir.push('  ' + call + ' = call i32 (i8*, i8*)* @' + scanf_name +
+                  '(i8* ' + str + ', i8* ' + cast + ')');
+      }
+    }
+    ir.push('  ; READ finish');
+    return ir;
+  }
+
+  function READLN(ast, cparams) {
+      return READ(ast, cparams);
+  }
+
+  function WRITE(ast, cparams) {
     var ir = [];
     ir.push('  ; WRITE start');
     for(var i=0; i < cparams.length; i++) {
@@ -196,6 +245,8 @@ function SYSTEM (st) {
           HALT: HALT,
           INTEGER: INTEGER,
           RANDOM:RANDOM,
+          READ: READ,
+          READLN: READLN,
           WRITE:WRITE,
           WRITELN:WRITELN
           };
