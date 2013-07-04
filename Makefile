@@ -22,7 +22,7 @@ TESTS ?= write1 write2 \
 	 book9-4 \
 	 qsort \
 	 halt \
-	 delay clrscr1 gotoxy1 keypressed1 \
+	 delay clrscr1 gotoxy1 keypressed1 keypressed2 box \
 	 random1 random2
 
 all: parse.js units/kbd.js
