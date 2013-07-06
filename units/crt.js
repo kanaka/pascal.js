@@ -6,15 +6,9 @@
 function CRT (st) {
   var kbd = require("./kbd.js");
 
-  function __init__() {
+  function init() {
     var ir = [],
-        call = st.new_name("%call"),
-        settings = st.lookup('_settings_');
-
-    // use scanf that works with raw termios mode
-    settings.scanf_name = 'raw_scanf';
-    settings.scanf_var_args = false;
-    st.insert('_settings_', settings);
+        call = st.new_name("%call");
 
     ir.push(['declare i32 @usleep(i32)']);
     ir.push(['@.vt100.movevh = private constant [9 x i8] c"\\1B[%d;%dH\\00"']);
@@ -29,7 +23,7 @@ function CRT (st) {
     return ir;
   }
 
-  function __stop__(ast, cparams) {
+  function stop(ast, cparams) {
     return [];
   }
 
@@ -126,18 +120,41 @@ function CRT (st) {
     return [];
   }
 
+  // Symbol table initialization
+  var settings = st.lookup('_settings_');
 
-  return {__init__: __init__,
-          __stop__: __stop__,
-          CRTINIT: CRTINIT,
-          CRTEXIT: CRTEXIT,
-          CLRSCR:CLRSCR,
-          DELAY:DELAY,
-          GOTOXY:GOTOXY,
-          KEYPRESSED: KEYPRESSED,
-          READKEY: READKEY,
-          SOUND: SOUND,
-          NOSOUND: NOSOUND};
+  // use scanf that works with raw termios mode
+  settings.scanf_name = 'raw_scanf';
+  settings.scanf_var_args = false;
+  st.insert('_settings_', settings);
+
+  function pins(nm, efn, fps, rtyp) {
+      st.unit_pinsert(nm, efn, fps, rtyp);
+  }
+
+  pins('CRTINIT', CRTINIT,
+       []);
+  pins('CRTEXIT', CRTEXIT,
+       []);
+  pins('CLRSCR',CLRSCR,
+       []);
+  pins('DELAY',DELAY,
+       [{type:{node:'type',name:'INTEGER'}}]);
+  pins('GOTOXY',GOTOXY,
+       [{type:{node:'type',name:'INTEGER'}},
+        {type:{node:'type',name:'INTEGER'}}]);
+  pins('KEYPRESSED', KEYPRESSED,
+       [],
+       {node:'type',name:'BOOLEAN'});
+  pins('READKEY', READKEY,
+       [],
+       {node:'type',name:'CHARACTER'});
+  pins('SOUND', SOUND,
+       [{node:'type',name:'INTEGER'}]);
+  pins('NOSOUND', NOSOUND,
+       []);
+
+  return {init: init, stop: stop};
 };
 
 exports.CRT = CRT;

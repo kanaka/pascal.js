@@ -49,6 +49,20 @@ function SymbolTable() {
     data[level][name.toUpperCase()] = value;
   }
 
+  // insert a definition for unit procedure/function
+  function unit_pinsert(name, evalfn, fparams, rettype) {
+    var kind = rettype ? 'func' : 'proc',
+        decl = {node:kind + '_decl',name:name,evalfn:evalfn,level:0,
+                type:rettype,lparams:[],fparams:[]};
+    for (var i=0; i < fparams.length; i++) {
+      var fparam = fparams[i];
+      fparam.node = 'param';
+      fparam.id = "param" + i;
+      decl.fparams.push(fparam);
+    }
+    insert(name,decl);
+  }
+
   function replace(name, value) {
     var name = name.toUpperCase(),
         idx = indexOf(name);
@@ -76,6 +90,7 @@ function SymbolTable() {
 
   return {lookup: lookup,
           insert: insert,
+          unit_pinsert: unit_pinsert,
           replace: replace,
           begin_scope: begin_scope,
           end_scope: end_scope,
@@ -87,7 +102,6 @@ function IR(theAST) {
 
   var st = new SymbolTable(),
       default_units = [],
-      unit_map = {},
       str_cnt = 0;
 
   // automatically loaded units depends on environment
@@ -120,11 +134,6 @@ function IR(theAST) {
       xhr.open('GET', unit_path, false);
       xhr.send(null);
       lib = new (eval(xhr.responseText))(st);
-    }
-    for (var prog in lib) {
-      if (lib.hasOwnProperty(prog) && prog !== '__init__') {
-        unit_map[prog] = lib[prog];
-      }
     }
     return lib;
   }
@@ -332,8 +341,8 @@ function IR(theAST) {
           for (var i=0; i<unit_list.length; i++) {
             var unit = unit_list[i],
                 lib = load_unit(unit);
-            unit_init_ir.push.apply(unit_init_ir, lib.__init__());
-            unit_stop_ir.push.apply(unit_stop_ir, lib.__stop__());
+            unit_init_ir.push.apply(unit_init_ir, lib.init());
+            unit_stop_ir.push.apply(unit_stop_ir, lib.stop());
           }
         }
 
@@ -516,26 +525,62 @@ function IR(theAST) {
 
       case 'stmt_call':
       case 'expr_call':
-        var id = ast.id,
+        var id = ast.id, pdecl;
+        try {
+          pdecl = st.lookup(id);
+        } catch (e) {
+          throw new Error("Unknown function '" + id + "'");
+        }
+        var lparams = pdecl.lparams,
+            fparams = pdecl.fparams,
             cparams = (ast.call_params || []);
         // evaluate the parameters
         for(var i=0; i < cparams.length; i++) {
-          var cparam = cparams[i];
-          // TODO: assert that call params and formal params match
-          // length and types
-          ir.push.apply(ir, toIR(cparam,level,fnames));
+          ir.push.apply(ir, toIR(cparams[i],level,fnames));
         }
-        if (typeof unit_map[id] === 'function') {
-          ir.push.apply(ir, unit_map[id](ast, cparams));
-        } else {
-          try {
-            var pdecl = st.lookup(id);
-          } catch (e) {
-            throw new Error("Unknown function '" + id + "'");
+        // Check that call params and formal params match length and
+        // types
+        if (fparams.length === 0 && cparams.length !== 0) {
+          throw new Error("Parameter mismatch calling " + id + ": " +
+                          "parameter(s) given but none defined");
+        }
+        for(var i=0; i < fparams.length; i++) {
+          var cparam = cparams[i],
+              fparam = fparams[i],
+              ftype = fparam.type.name;
+          if (ftype === 'varargs') {
+            // We've checked as far as we can go on this side.
+            // 'varargs' only applies to built-in unit routines and
+            // must be done by the routine evalfn itself
+            break;
           }
-          var lparams = pdecl.lparams,
-              fparams = pdecl.fparams,
-              param_list = [];
+          if (ftype === 'any') {
+            // The routine can accept multiple types in this position
+            // so assume we're good and continue to the next argument.
+            // 'any' only applies to built-in unit routines and
+            // checking must be done by the routine evalfn itself
+            continue;
+          }
+          if (!cparam) {
+            throw new Error("Parameter mismatch calling " +
+                            id + ": more than " + i +
+                            " parameter(s) required but " + i +
+                            " given")
+          }
+          var ctype = cparam.type.name;
+          if (ctype !== ftype) {
+            var cname = cparam.id ? cparam.id : "'" + cparam.val + "'";
+            throw new Error("Parameter mismatch calling " +
+                            id + ": " + cname + ":" + ctype +
+                            " given, but definition is " + ftype);
+          }
+        }
+        if (pdecl.evalfn) {
+          // This is a call to built-in unit routine and needs to be
+          // evaluated (in a sense: macro expanded)
+          ir.push.apply(ir, pdecl.evalfn(ast, cparams));
+        } else {
+          var param_list = [];
           for(var i=0; i < lparams.length; i++) {
             var lparam = lparams[i],
                 lltype = null;
@@ -957,10 +1002,9 @@ function IR(theAST) {
           vdecl = null;
         }
 
-        if ((vdecl && vdecl.fparams) ||
-            (typeof unit_map[ast.id] === "function")) {
-          // This is actually a function call expression so
-          // replace the AST with a function and evalutate it
+        if (vdecl && vdecl.fparams) {
+          // This is actually a parameterless function call expression
+          // so replace the AST with a function and evalutate it
           ast.node = 'expr_call';
           ast.call_params = [];
           ir.push.apply(ir, toIR(ast,level,fnames));

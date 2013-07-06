@@ -3,16 +3,8 @@
 "use strict";
 
 function SYSTEM (st) {
-  function __init__() {
-    var ir = [],
-        settings = st.lookup('_settings_');
-
-    // set default scanf function
-    if (!settings.scanf_name) {
-        settings.scanf_name = 'scanf';
-        settings.scanf_var_args = true;
-        st.insert('_settings_', settings);
-    }
+  function init() {
+    var ir = [];
 
     ir.push(['declare i32 @printf(i8*, ...)']);
     ir.push(['declare i32 @scanf(i8*, ...)']);
@@ -32,10 +24,11 @@ function SYSTEM (st) {
     ir.push(['@.chr_format = private constant [3 x i8] c"%c\\00"']);
     ir.push(['@.int_format = private constant [3 x i8] c"%d\\00"']);
     ir.push(['@.float_format = private constant [4 x i8] c"% E\\00"']);
+
     return ir;
   }
 
-  function __stop__() {
+  function stop() {
       return [];
   }
 
@@ -265,21 +258,47 @@ function SYSTEM (st) {
     return ir;
   }
 
-  return {__init__: __init__,
-          __stop__: __stop__,
-          // I/O routines
-          READ: READ,
-          READLN: READLN,
-          WRITE:WRITE,
-          WRITELN:WRITELN,
-          // Transfer functions
-          CHAR: CHAR,
-          CHR: CHR,
-          INTEGER: INTEGER,
-          // Miscellaneous routines
-          HALT: HALT,
-          RANDOM:RANDOM
-          };
+  // Symbol table initialization
+  var settings = st.lookup('_settings_');
+
+  // set default scanf function
+  if (!settings.scanf_name) {
+      settings.scanf_name = 'scanf';
+      settings.scanf_var_args = true;
+      st.insert('_settings_', settings);
+  }
+
+  function pins(nm, efn, fps, rtyp) {
+      st.unit_pinsert(nm, efn, fps, rtyp);
+  }
+ 
+  // I/O routines
+  pins('READ', READ,
+       [{type:{node:'type',name:'varargs'},var:true}]);
+  pins('READLN', READLN,
+       [{type:{node:'type',name:'varargs'},var:true}]);
+  pins('WRITE', WRITE,
+       [{type:{node:'type',name:'varargs'}}]);
+  pins('WRITELN', WRITELN,
+       [{type:{node:'type',name:'varargs'}}]);
+  // Transfer functions
+  pins('CHAR', CHAR,
+       [{type:{node:'type',name:'INTEGER'}}],
+       {node:'type',name:'CHARACTER'});
+  pins('CHR', CHR,
+       [{type:{node:'type',name:'INTEGER'}}],
+       {node:'type',name:'CHARACTER'});
+  pins('INTEGER', INTEGER,
+       [{type:{node:'type',name:'CHARACTER'}}],
+       {node:'type',name:'INTEGER'});
+  // Miscellaneous routines
+  pins('HALT', HALT,
+       [{type:{node:'type',name:'INTEGER'}}]);
+  pins('RANDOM', RANDOM,
+       [{type:{node:'type',name:'varargs'}}],
+       {node:'type',name:'any'});
+
+  return {init: init, stop: stop};
 };
 
 if (typeof module !== 'undefined') {
