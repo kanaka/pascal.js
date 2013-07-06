@@ -9,7 +9,7 @@ TESTS ?= semi1 \
 	 expr1 expr2 \
 	 float1 float2 \
 	 bool1 \
-	 char1 \
+	 char1 char2 \
 	 const1 const2 \
 	 type1 type2 type3 \
 	 proc1 proc2 proc3 proc4 proc5 \
