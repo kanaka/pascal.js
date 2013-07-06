@@ -17,7 +17,7 @@ TESTS ?= semi1 \
 	 string1 string2 string3 string4 string5 string6 string7 string8 string9 \
 	 array1 array2 array3 array4 array5 array6 array7 \
 	 record1 record2 record3 record4 \
-	 deref1 deref2 \
+	 deref1 deref2 deref3 \
 	 if1 if2 \
 	 nested1 nested2 nested3 nested4 \
 	 for1 for2 repeat1 while1 while2 \
@@ -25,9 +25,8 @@ TESTS ?= semi1 \
 	 delay clrscr1 gotoxy1 keypressed1 keypressed2 box \
 	 random1 random2 \
 	 \
-	 pfib ffib \
+	 pfib ffib area qsort \
 	 book9-4 \
-	 qsort \
 	 \
 	 fail_param1 fail_param2 fail_param3 fail_param4 \
 	 fail_func1 fail_func2
