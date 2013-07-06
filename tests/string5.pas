@@ -4,10 +4,11 @@ var
 
 procedure PRINTIT(F : String);
   begin
-    WriteLn(F);
+    WriteLn('F: ', F);
   end;
 
 begin
   H := 'Hello World';
+  WriteLn('H: ', H);
   PRINTIT(H);
 end.

@@ -13,12 +13,13 @@ TESTS ?= write1 write2 \
 	 type1 type2 type3 \
 	 proc1 proc2 proc3 proc4 proc5 pfib \
 	 func1 ffib \
-	 string1 string2 string3 string4 string5 \
+	 string1 string2 string3 string4 string5 string6 string7 string8 string9 \
+	 array1 array2 array3 array4 array5 array6 array7 \
+	 record1 record2 record3 record4 \
+	 deref1 deref2 \
 	 if1 if2 \
 	 nested1 nested2 nested3 nested4 \
 	 for1 for2 repeat1 while1 while2 \
-	 array1 array2 array4 array5 array6 array7 \
-	 record1 record2 record3 record4 \
 	 book9-4 \
 	 qsort \
 	 halt \
@@ -38,7 +39,7 @@ parse.js: parse.jison
 units/kbd.js: units/kbd.ll
 	echo "Munging $< into $@"
 	@echo "var llvm_ir = [" > $@; \
-	egrep -v "^target |^@stdout =|declare.*@fflush|declare.*@printf|struct._IO_FILE =" $< | \
+	egrep -v "^target |^@stdout =|declare.*@malloc|declare.*@fflush|declare.*@printf|struct._IO_FILE =" $< | \
 	    sed -e "s@\\\\@\\\\\\\\@g" \
 	        -e "s/'/\\\\'/g" \
 		-e "s/^/'/" \
@@ -93,7 +94,7 @@ $(LL_OUTPUT): $(BUILDDIR)/%.out2: $(BUILDDIR)/%.2
 	fi
 
 $(DIFFS): $(BUILDDIR)/%.diff: $(BUILDDIR)/%.out1 $(BUILDDIR)/%.out2
-	diff -u $^ > $@
+	d=`diff -u $^` && echo "$${d}" > $@
 
 
 test_prefix:

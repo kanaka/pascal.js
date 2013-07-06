@@ -149,7 +149,11 @@ function IR(theAST) {
       case 'REAL':      lltype = "float"; vdef = "0.0"; break;
       case 'BOOLEAN':   lltype = "i1";    vdef = "0"; break;
       case 'CHARACTER': lltype = "i8";    vdef = "0"; break;
-      case 'STRING':    lltype = "i8*";   vdef = "null"; break;
+      case 'STRING':
+        annotate_type(t.type);
+        lltype = "i8*";
+        vdef = "null";
+        break;
       case 'ARRAY':
         var index = t.index,
             start = index.start,
@@ -290,6 +294,9 @@ function IR(theAST) {
             block = ast.block;
         st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
 
+        ir.push('declare i8* @malloc(i64)');
+        ir.push('declare i64 @strlen(i8*)');
+        ir.push('declare i8* @strncpy(i8*, i8*, i64)');
         ir.push('');
         block.param_list = [];
         ir.push.apply(ir, toIR(block,level,fnames));
@@ -444,17 +451,16 @@ function IR(theAST) {
             expr = ast.expr;
         ir.push('  ; ASSIGN start');
         ir.push.apply(ir,toIR(expr,level,fnames));
-        var litype = null, listack = null,
-            eitype = expr.itype, eilocal = expr.ilocal;
+        var litype = null, listack = null;
 
         if (lvalue.id === fname) {
           // This is actually a function name being used to set the
           // return value for the function so we don't evaluate the
           // lvalue
           var pdecl = st.lookup(fname);
-          ptype = annotate_type(pdecl.type),
+          ptype = annotate_type(pdecl.type);
           lvalue.type = pdecl.type;
-          lvalue.itype = ptype.lltype,
+          lvalue.itype = ptype.lltype;
           pdecl.ireturn = true;
           pdecl.itype = lvalue.itype;
           st.replace(fname,pdecl);
@@ -473,28 +479,37 @@ function IR(theAST) {
               chr = '%' + st.new_name('chr');
           ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
           ir.push('  ' + chr + ' = load i8* ' + decay); 
-          eitype = 'i8';
-          eilocal = chr;
+          ir.push('  store i8 ' + chr + ', ' + litype + '* ' + listack);
         } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING' && expr.val) {
-          // string literal being assigned so coerce
-          var decay = '%' + st.new_name('arraydecay');
-          ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
-          eitype = 'i8*';
-          eilocal = decay;
+          // string literal being assigned to string variable
+          ir.push('  store i8* getelementptr inbounds (' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0), ' + litype + '* ' + listack);
+        } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING') {
+          // string being assigned to string so malloc and copy
+          var slen1 = '%' + st.new_name('slen'),
+              slen2 = '%' + st.new_name('slen'),
+              lvar = '%' + st.new_name('lvar'),
+              decay1 = '%' + st.new_name('arraydecay'),
+              decay2 = '%' + st.new_name('arraydecay'),
+              chr = '%' + st.new_name('chr'),
+              res = '%' + st.new_name('res');
+          ir.push('  ' + slen1 + ' = call i64 @strlen(i8* ' + expr.ilocal + ')');
+          ir.push('  ' + slen2 + ' = add i64 1, ' + slen1);
+          ir.push('  ' + lvar + ' = call i8* @malloc(i64 ' + slen2 + ')');
+          ir.push('  store i8* ' + lvar + ', ' + litype + '* ' + listack);
+          ir.push('  ' + res + ' = call i8* @strncpy(i8* ' + lvar + ', i8* ' + expr.ilocal + ', i64 ' + slen2 + ')');
         } else if (lvalue.type.name === 'REAL' && expr.type.name === 'INTEGER') {
           // coerce integer to real
           var conv = st.new_name("%conv");
           ir.push('  ' + conv + ' = sitofp i32 ' + expr.ilocal + ' to float');
-          eitype = "float";
-          eilocal = conv;
+          ir.push('  store float ' + conv + ', ' + litype + '* ' + listack);
         } else if (lvalue.type.name !== expr.type.name) {
           throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
+        } else {
+          ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + litype + '* ' + listack);
         }
-
-        ir.push('  store ' + eitype + ' ' + eilocal + ', ' + litype + '* ' + listack);
         
-        ast.itype = lvalue.itype;
-        ast.istack = lvalue.istack;
+        ast.itype = litype;
+        ast.istack = listack;
         ast.ilocal = expr.ilocal;
         ir.push('  ; ASSIGN finish');
         break;
@@ -845,16 +860,28 @@ function IR(theAST) {
         ir.push.apply(ir, toIR(lvalue,level,fnames));
 
         var atype = lvalue.type,
-            start = atype.index.start,
+            start, rtype, ritype,
             aname = '%' + st.new_name(deref_name(ast)),
-            aidx = aname + 'idx',
+            sub = aname + 'sub',
+            aptr1 = aname + 'ptr1',
             aoff = aname + 'off',
             aval = aname + 'val';
-        ir.push('  ' + aidx + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
-        ir.push('  ' + aoff + ' = getelementptr inbounds ' + atype.lltype + '* ' + lvalue.istack + ', i32 0, ' + expr.itype + ' ' + aidx);
-        ir.push('  ' + aval + ' = load ' + atype.type.lltype + '* ' + aoff);
-        ast.type = atype.type;
-        ast.itype = atype.type.lltype;
+        // TODO: bounds checking
+        start = atype.index.start;
+        rtype = atype.type;
+        ritype = atype.type.lltype;
+        if (atype.name === 'STRING') {
+          ir.push('  ' + sub + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
+          ir.push('  ' + aptr1 + ' = load ' + atype.lltype + '* ' + lvalue.istack);
+          ir.push('  ' + aoff + ' = getelementptr inbounds ' + atype.lltype + ' ' + aptr1 + ', i32 ' + sub);
+          ir.push('  ' + aval + ' = load ' + atype.lltype + ' ' + aoff);
+        } else {
+          ir.push('  ' + sub + ' = sub ' + expr.itype + ' ' + expr.ilocal + ', ' + start);
+          ir.push('  ' + aoff + ' = getelementptr inbounds ' + atype.lltype + '* ' + lvalue.istack + ', i32 0, ' + expr.itype + ' ' + sub);
+          ir.push('  ' + aval + ' = load ' + ritype + '* ' + aoff);
+        }
+        ast.type = rtype;
+        ast.itype = ritype;
         ast.istack = aoff;
         ast.ilocal = aval;
         break;
@@ -906,14 +933,16 @@ function IR(theAST) {
       case 'string':
         var slen = ast.val.length+1,
             re = /"/g,
-            sval = ast.val.replace(re, '\\22'),
+            itype = '[' + slen + ' x i8]',
+            sval = 'c"' + ast.val.replace(re, '\\22') + '\\00"',
+            lname = '%' + st.new_name('string' + str_cnt),
             sname = '@.string' + (str_cnt++),
             lname;
-        ir.push([sname + ' = private unnamed_addr constant [' + slen + ' x i8] c"' + sval + '\\00"']);
-        ast.itype = '[' + slen + ' x i8]*';
-        ast.ilocal = sname;
+        ir.push([sname + ' = global ' + itype + ' ' + sval]);
+        ir.push('  ' + lname + ' = getelementptr inbounds ' + itype + '* ' + sname + ', i32 0'); 
+        ast.itype = itype + '*';
+        ast.ilocal = lname;
         ast.istack = sname;
-        ast.iref = sname;
         break;
       case 'boolean':
         ast.itype = "i1";

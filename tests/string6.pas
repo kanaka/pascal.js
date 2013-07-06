@@ -3,5 +3,6 @@ var
   H       : String;
 begin
   H := 'Hello World';
-  WriteLn('H: ''', H, '''');
+  H[1] := 'M';
+  WriteLn('H: ', H);
 end.

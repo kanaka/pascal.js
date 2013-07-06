@@ -16,7 +16,7 @@ function Compiler() {
 
   function assemble(source, outfile) {
     var child;
-    child = exec('gcc -x assembler -o ' + outfile + ' -', function(error, stdout, stderr) {
+    child = exec('gcc -g -x assembler -o ' + outfile + ' -', function(error, stdout, stderr) {
       if (error !== null) {
         throw new Error("Errors during assembly:\n" + stderr);
       }
