@@ -315,7 +315,13 @@ function IR(theAST) {
 
         block.param_list = [];
         st.insert(id,{name:new_fname,level:level,fparams:fparams,lparams:[]});
-        ir.push.apply(ir, toIR(block,level,fnames.concat([id])));
+
+        try {
+          ir.push.apply(ir, toIR(block,level,fnames.concat([id])));
+        } catch(e) {
+          // Catch and report errors with line numbers
+          throw new Error(e.toString() + " [line " + (e.lineno+1) + "]");
+        }
 
         ir.push('');
         ir.push('declare i8* @malloc(i64)');
@@ -386,16 +392,29 @@ function IR(theAST) {
         // Evaluate the children. We might need to modify the
         // param-list based on internal variables that refer to higher
         // level lexical scope
-        for (var i=0; i < decls.length; i++) {
-          var decl = decls[i];
-          if (decl.node === 'proc_decl' || decl.node === 'func_decl') {
-            pdecl_ir.push.apply(pdecl_ir, toIR(decl,level,fnames));
-          } else {
-            vdecl_ir.push.apply(vdecl_ir, toIR(decl,level,fnames));
+        var curAst = null;
+        try {
+          for (var i=0; i < decls.length; i++) {
+            var decl = decls[i];
+            curAst = decl;
+            if (decl.node === 'proc_decl' || decl.node === 'func_decl') {
+              pdecl_ir.push.apply(pdecl_ir, toIR(decl,level,fnames));
+            } else {
+              vdecl_ir.push.apply(vdecl_ir, toIR(decl,level,fnames));
+            }
           }
-        }
-        for (var i=0; i < stmts.length; i++) {
-          stmts_ir.push.apply(stmts_ir, toIR(stmts[i],level,fnames));
+          for (var i=0; i < stmts.length; i++) {
+            curAst = stmts[i];
+            stmts_ir.push.apply(stmts_ir, toIR(stmts[i],level,fnames));
+          }
+        } catch (e) {
+          // Add the line number to the exception but only if it's not
+          // already set, otherwise we would stomp a more specific
+          // line number
+          if (typeof e.lineno === 'undefined') {
+            e.lineno = curAst.lineno;
+          }
+          throw e;
         }
 
         // Variables that refer to higher lexical scope

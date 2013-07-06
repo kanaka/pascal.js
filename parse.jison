@@ -184,12 +184,12 @@ decl            : CONST const_decls SEMI                {{ $$ = $2; }}
 const_decls     : const_decls SEMI const_decl           {{ $$ = $1.concat($3); }}
                 |                  const_decl           {{ $$ = [$1]; }}
                 ;
-const_decl      : id EQ expr                            {{ $$ = {node:'const_decl',id:$1,expr:$3}; }}
+const_decl      : id EQ expr                            {{ $$ = {node:'const_decl',id:$1,expr:$3,lineno:yylineno}; }}
                 ;
 type_decls      : type_decls SEMI type_decl             {{ $$ = $1.concat($3); }}
                 |                 type_decl             {{ $$ = [$1]; }}
                 ;
-type_decl       : id EQ type                            {{ $$ = {node:'type_decl',id:$1,type:$3}; }}
+type_decl       : id EQ type                            {{ $$ = {node:'type_decl',id:$1,type:$3,lineno:yylineno}; }}
                 ;
 type            : id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
                 | INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
@@ -237,15 +237,15 @@ var_decls       : var_decls SEMI var_decl               {{ $$ = $1.concat($3); }
 /* var_decl is plural */
 var_decl        : ids COLON type                        {{ $$ = [];
                                                            for(var i=0; i < $1.length; i++) {
-                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3}]); } }}
+                                                             $$ = $$.concat([{node:'var_decl',id:$1[i],type:$3,lineno:yylineno}]); } }}
                 ;
 
-proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4}; }}
-                | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$3}; }}
+proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4,lineno:yylineno}; }}
+                | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$3,lineno:yylineno}; }}
                 |
                 ;
-func_decl       : id formal_params COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6}; }}
-                | id               COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5}; }}
+func_decl       : id formal_params COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6,lineno:yylineno}; }}
+                | id               COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5,lineno:yylineno}; }}
                 |
                 ;
 formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}
@@ -271,8 +271,8 @@ stmts           : stmts SEMI stmt                       {{ $$ = $1.concat($3); }
                 |            stmt                       {{ $$ = [$1]; }}
                 | /* none */                            {{ $$ = []; }}
                 ;
-stmt            : open_stmt                             {{ $$ = $1; }}
-                | closed_stmt                           {{ $$ = $1; }}
+stmt            : open_stmt                             {{ $1.lineno = yylineno; $$ = $1; }}
+                | closed_stmt                           {{ $1.lineno = yylineno; $$ = $1; }}
                 ;
 closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assign',lvalue:$1,expr:$3}; }}
                 | id call_params                        {{ $$ = {node:'stmt_call',id:$1,call_params:$2}; }}
