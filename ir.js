@@ -288,7 +288,7 @@ function IR(theAST) {
     }
     node = ast.node,
     level = level ? level : 0;
-    fnames = fnames ? fnames : ['main'];
+    fnames = fnames ? fnames : [];
     fname = fnames[fnames.length-1];
     for (var i=0; i < level; i++) {
       indent = indent + "  ";
@@ -298,17 +298,27 @@ function IR(theAST) {
 
     switch (node) {
       case 'program':
-        var name = ast.id,  // TODO: do anything with program name?
+        // Similar to a proc_decl but with declarations and called by
+        // @main
+        var id = ast.id,
             fparams = ast.fparams,
-            block = ast.block;
-        st.insert('main',{name:'main',level:level,fparams:fparams,lparams:[]});
+            block = ast.block,
+            new_fname = st.new_name(id);
 
+        block.param_list = [];
+        st.insert(id,{name:new_fname,level:level,fparams:fparams,lparams:[]});
+        ir.push.apply(ir, toIR(block,level,fnames.concat([id])));
+
+        ir.push('');
         ir.push('declare i8* @malloc(i64)');
         ir.push('declare i64 @strlen(i8*)');
         ir.push('declare i8* @strncpy(i8*, i8*, i64)');
         ir.push('');
-        block.param_list = [];
-        ir.push.apply(ir, toIR(block,level,fnames));
+        ir.push('define i32 @main() {');
+        ir.push('entry:');
+        ir.push('  %ret = call i32 @' + new_fname + '()');
+        ir.push('  ret i32 0');
+        ir.push('}');
         break;
 
       case 'block':
