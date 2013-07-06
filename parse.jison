@@ -194,9 +194,7 @@ type_decl       : id EQ type                            {{ $$ = {node:'type_decl
 type            : id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
                 | INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
-                | STRING                                {{ $$ = {node:'type',name:'STRING',
-                                                                 type:{node:'type',name:'CHARACTER'},
-                                                                 index:{node:'subrange',start:1} }; }}
+                | STRING                                {{ $$ = {node:'type',name:'STRING'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
                 | CHAR                                  {{ $$ = {node:'type',name:'CHARACTER'}; }}
 //                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
@@ -316,8 +314,7 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                 | STRING_LITERAL                        {{ var raw = $1.substr(1,$1.length-2),
                                                                re = /''/g,
                                                                val = raw.replace(re, "'");
-                                                           $$ = {node:'string',val:val,
-                                                                 type:{node:'type',name:'STRING',type:{node:'type',name:'CHARACTER'} },
+                                                           $$ = {node:'string',val:val,type:{node:'type',name:'STRING'},
                                                                  index:{node:'subrange',start:1,end:val.length+1} }; }}
                 | CHARACTER_LITERAL                     {{ $$ = {node:'character',type:{node:'type',name:'CHARACTER'},val:$1}; }}
                 | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:true}; }}

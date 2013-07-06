@@ -206,6 +206,45 @@ function SYSTEM (st) {
   // String routines
   //
 
+  function CONCAT(ast, cparams) {
+    var ir = [], ir_after = [],
+        clen = cparams.length,
+        cparam,
+        lname = st.new_name('%concat'),
+        prev_tsize = st.new_name('%tsize'),
+        new_tsize = st.new_name('%new_tsize');
+    if (clen < 2) {
+      throw new Error("CONCAT requires at least two arguments (" + clen + " given)");
+    }
+    ir.push('  ; CONCAT start');
+    ir.push('  ' + prev_tsize + ' = add i64 0, 0');
+    for (var i=0; i < cparams.length; i++) {
+        cparam = cparams[i];
+        if (cparam.type.name !== 'STRING') {
+            throw new Error("Concat arguments must be STRINGs");
+        }
+        var decay = st.new_name('%decay'),
+            size = st.new_name('%size'),
+            tsize = st.new_name('%tsize'),
+            ret = st.new_name('%ret');
+
+        ir.push('  ' + decay + ' = bitcast ' + cparam.itype + ' ' + cparam.ilocal + ' to i8*');
+        ir.push('  ' + size + ' = call i64 @strlen(i8* ' + decay + ')');
+        ir.push('  ' + tsize + ' = add i64 ' + size + ', ' + prev_tsize);
+        prev_tsize = tsize;
+        ir_after.push('  ' + ret + ' = call i8* @strncat(i8* ' + lname + ', i8* ' + decay + ', i64' + size + ')');
+    }
+    ir.push('  ' + new_tsize + ' = add i64 ' + prev_tsize + ', 1');
+    ir.push('  ' + lname + ' = call i8* @malloc(i64 ' + new_tsize + ')');
+    ir.push('  store i8 0, i8* ' + lname);
+    ir.push.apply(ir, ir_after);
+    ir.push('  ; CONCAT finish');
+    ast.type = {node:'type',name:'STRING'};
+    ast.itype = 'i8*';
+    ast.ilocal = lname;
+    return ir;
+  }
+
   //
   // Heap routines
   //
@@ -291,6 +330,12 @@ function SYSTEM (st) {
   pins('INTEGER', INTEGER,
        [{type:{node:'type',name:'CHARACTER'}}],
        {node:'type',name:'INTEGER'});
+  // String routines
+  pins('CONCAT', CONCAT,
+       [{type:{node:'type',name:'STRING'}},
+        {type:{node:'type',name:'STRING'}},
+        {type:{node:'type',name:'varargs'}}],
+       {node:'type',name:'STRING'});
   // Miscellaneous routines
   pins('HALT', HALT,
        [{type:{node:'type',name:'INTEGER'}}]);

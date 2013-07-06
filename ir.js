@@ -144,6 +144,14 @@ function IR(theAST) {
       var tdecl = st.lookup(t.id);
       t = tdecl.type;
     }
+    if (t.name === 'STRING') {
+      if (typeof t.index === 'undefined') {
+        t.index = {node:'subrange',start:1};
+      }
+      if (typeof t.type === 'undefined') {
+        t.type = {node:'type',name:'CHARACTER'};
+      }
+    }
     return t;
   }
 
@@ -313,6 +321,7 @@ function IR(theAST) {
         ir.push('declare i8* @malloc(i64)');
         ir.push('declare i64 @strlen(i8*)');
         ir.push('declare i8* @strncpy(i8*, i8*, i64)');
+        ir.push('declare i8* @strncat(i8*, i8*, i64)');
         ir.push('');
         ir.push('define i32 @main() {');
         ir.push('entry:');
@@ -842,6 +851,10 @@ function IR(theAST) {
             op = 'icmp ' + boolLookup[ast.op];
           }
           resType={node:'type',name:'BOOLEAN',lltype:'i1'};
+        } else if (ast.op === "plus" &&
+                    ltype.name === 'STRING' && rtype.name === 'STRING') {
+         // string concatenation shorthand
+         resType = annotate_type({node:'type',name:'STRING'});
         } else if (ast.op in {plus:1,minus:1,star:1,slash:1,div:1,mod:1}) {
           if (ast.op === 'slash') {
             resType = {node:'type',name:'REAL',lltype:"float"};
@@ -882,7 +895,14 @@ function IR(theAST) {
           right.ilocal = conv;
           right.itype = 'float';
         }
-        ir.push('  ' + dest_name + ' = ' + op + ' ' + left.itype + ' ' + left.ilocal + ', ' + right.ilocal);
+        if (resType.name === 'STRING') {
+          // string concatenation shorthand
+          var fake_expr = {node:'expr_call',id:'CONCAT',call_params:[left, right]};
+          ir.push.apply(ir, toIR(fake_expr,level,fnames));
+          dest_name = fake_expr.ilocal;
+        } else {
+          ir.push('  ' + dest_name + ' = ' + op + ' ' + left.itype + ' ' + left.ilocal + ', ' + right.ilocal);
+        }
         ast.type = resType;
         ast.itype = resType.lltype;
         ast.ilocal = dest_name;
