@@ -3,10 +3,11 @@ BUILDDIR ?= build
 RUNLL ?= ./runll
 RUNFPC ?= ./runfpc
 
-TESTS ?= write1 write2 \
+TESTS ?= semi1 \
+	 write1 write2 write3 \
 	 read1 read2 read3 read4 \
 	 expr1 expr2 \
-	 float1 \
+	 float1 float2 \
 	 bool1 \
 	 char1 \
 	 const1 const2 \
