@@ -101,17 +101,8 @@ function SymbolTable() {
 function IR(theAST) {
 
   var st = new SymbolTable(),
-      default_units = [],
-      str_cnt = 0;
-
-  // automatically loaded units depends on environment
-  if (isNode()) {
-    // Node.js
-    var default_units = ['SYSTEM', 'CRT'];
-  } else {
-    // Browser
-    var default_units = ['SYSTEM'];
-  }
+      str_cnt = 0,
+      default_units = ['SYSTEM'];
 
   // Store global settings in the symbol table
   st.insert('_settings_', {});

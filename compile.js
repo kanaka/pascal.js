@@ -1,41 +1,39 @@
-function Compiler() {
+var fs = require('fs'),
+    path = require('path');
 
-  function compile(source, callback) {
+function Compiler() {
+  var vm = require('vm'),
+      Parse = require('./parse'),
+      IR = require('./ir.js'),
+      llcode = null,
+      llvm_path = path.resolve('./llvm.js');
+ 
+  // Hacks to load the llvm.js compiler directly
+  llcode = fs.readFileSync('./llvm.js/compiler.js', "utf8");
+  var init_ctx = {process: {cwd: process.cwd,
+                            argv: [],
+                            stdout: {write: function(x) {}},
+                            stderr: {write: function(x) {}}},
+                  require: require,
+                  __dirname: llvm_path},
+      llcompiler = vm.createContext(init_ctx);
+
+  vm.runInContext(llcode, llcompiler);
+
+
+  function compileJS(source) {
     var ast = Parse.parser.parse(source),
         ir = IR.toIR(ast),
-        child;
-    child = exec('llc -', function(error, stdout, stderr) {
-      if (error !== null) {
-        throw new Error("Errors during compilation:\n" + stderr);
-      } 
-      callback(stdout);
-    });
-    child.stdin.write(ir);
-    child.stdin.end();
+        out = "";
+    llcompiler.process.stdout.write = function(x) { out += x; };
+    llcompiler.compile(ir);
+    return out;
   }
 
-  function assemble(source, outfile) {
-    var child;
-    child = exec('gcc -g -x assembler -o ' + outfile + ' -', function(error, stdout, stderr) {
-      if (error !== null) {
-        throw new Error("Errors during assembly:\n" + stderr);
-      }
-    });
-    child.stdin.write(source);
-    child.stdin.end();
-  }
-
-  return {compile:compile,
-          assemble:assemble};
+  return {compileJS: compileJS};
 }
 
 if (typeof module !== 'undefined') {
-  var fs = require('fs'),
-      path = require('path'),
-      Parse = require('./parse'),
-      IR = require('./ir.js'),
-      exec = require('child_process').exec;
-
   exports.Compiler = Compiler;
 
   exports.main = function commonjsMain(args) {
@@ -43,13 +41,12 @@ if (typeof module !== 'undefined') {
         console.log('Usage: '+args[0]+' SOURCE_FILE [OUTFILE]');
         process.exit(1);
     }
-    var infile = args[1],
-        outfile = args[2] || 'a.out',
-        source = fs.readFileSync(path.normalize(infile), "utf8"),
-        compiler = new Compiler();
-    compiler.compile(source, function (assembly) {
-      compiler.assemble(assembly, outfile);
-    });
+    var infile = path.resolve(args[1]),
+        outfile = args[2] || 'a.out.js',
+        source = fs.readFileSync(infile, "utf8"),
+        compiler = new Compiler(),
+        js = compiler.compileJS(source);
+    fs.writeFileSync(outfile, js);
   }
   if (require.main === module) {
     exports.main(process.argv.slice(1));

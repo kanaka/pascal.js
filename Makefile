@@ -81,11 +81,11 @@ $(FPC_OBJECTS): $(BUILDDIR)/%.1: $(TESTDIR)/%.pas $(TEST_DEPS)
 	fi
 
 $(LL_OBJECTS): $(BUILDDIR)/%.2: $(TESTDIR)/%.pas $(TEST_DEPS)
-	node compile.js $< $@
+	node compile_native.js $< $@
 
 $(FAIL_MARKS): $(BUILDDIR)/%.fail-msg: $(TESTDIR)/%.pas $(TEST_DEPS)
 	@echo "Verifying that $< fails"; \
-	out=`node compile.js $< /dev/null 2>&1`; \
+	out=`node compile_native.js $< /dev/null 2>&1`; \
 	if [ $$? = 0 ]; then \
 	    echo "$< should have failed but did not"; \
 	else \

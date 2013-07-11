@@ -35,7 +35,8 @@ LLVM IR:<br>
 <textarea id="the_ir" cols=90 rows=5 style="border: 1px solid black; margin-bottom: 0.6em">
 </textarea>
 <br>
-<input value="Compile IR to JS (emscripten)" type="button" onclick="doCompile()">
+<input value="Optimize and compile IR to JS" type="button" onclick="doCompile1()">
+<input value="Compile IR to JS" type="button" onclick="doCompile2()">
 <br>
 Compiled JavaScript:<br>
 <textarea id="the_js" cols=90 rows=5 style="border: 1px solid black; margin-bottom: 0.6em">
@@ -75,6 +76,8 @@ Execution Output:<br>
   var XHR_PREFIX = "llvm.js/";
 
 </script>
+<script src="llvm.js/llvm-as.js"></script>
+<script src="llvm.js/llvm-dis.js"></script>
 <script src="llvm.js/compiler.js">
 </script>
 <script>
@@ -111,7 +114,32 @@ Execution Output:<br>
     }
   }
 
-  function doCompile() {
+  function doCompile1() {
+    XHR_PREFIX = "llvm.js/";
+    var ir = document.getElementById('the_ir').value,
+        outElem = document.getElementById('the_js'),
+        new_ir = '', js = '';
+
+    try {
+      new_ir = llvmDis(llvmAs(ir));
+    } catch (e) {
+      outElem.style.backgroundColor = '#ffe0e0';
+      outElem.value = 'Error in compilation: ' + e; // error message
+      return;
+    }
+
+    print = function(x) { js += x; };
+    compile(new_ir);
+    if (js && js[0] != 'E') {
+      outElem.style.backgroundColor = '#eeffee';
+      outElem.value = js;
+    } else {
+      outElem.style.backgroundColor = '#ffe0e0';
+      outElem.value = js; // error message
+    }
+  }
+
+  function doCompile2() {
     XHR_PREFIX = "llvm.js/";
     var ir = document.getElementById('the_ir').value,
         outElem = document.getElementById('the_js'),

@@ -1154,10 +1154,15 @@ function llvm_double_hex(input) {
   return '0x' + ieee64.Convert2Hex()
 };
 function llvm_float_hex(input) {
-    var d64 = llvm_double_hex(input);
-    //return d64.replace(/(.*)........$/, "$100000000");
-    return d64.replace(/(.*)........$/, "$1A0000000");
+  var d64 = llvm_double_hex(input);
+  //return d64.replace(/(.*)........$/, "$100000000");
+  return d64.replace(/(.*)........$/, "$1A0000000");
 };
 
-exports.llvm_float_hex = llvm_float_hex;
-exports.llvm_double_hex = llvm_double_hex;
+if (typeof module !== 'undefined') {
+  exports.llvm_float_hex = llvm_float_hex;
+  exports.llvm_double_hex = llvm_double_hex;
+} else {
+  var ieee754 = {llvm_float_hex:llvm_float_hex,
+                 llvm_double_hex:llvm_double_hex};
+}
