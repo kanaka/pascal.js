@@ -5,12 +5,11 @@
 %options case-insensitive
 %s comment
 
-/* STRING                  "'"[^']*"'" */
 STRING                  "'"(?:[^']+|"''")*"'"
 REAL                    [0-9]+"."[0-9]+
 INTEGER                 [0-9]+
 BOOLEAN                 "TRUE"|"FALSE"
-CHARACTER               "#"[0-9]+|"^".
+CHARACTER               "#"[0-9]+
 ID                      [A-Za-z_][A-Za-z0-9_]*
 WHITESPACE              \s+
 
@@ -37,6 +36,7 @@ WHITESPACE              \s+
 ":"                     return "COLON";
 ";"                     return "SEMI";
 ","                     return "COMMA";
+".."                    return "DOTDOT";
 "."                     return "DOT";
 "("                     return "LPAREN";
 ")"                     return "RPAREN";
@@ -191,17 +191,14 @@ type_decls      : type_decls SEMI type_decl             {{ $$ = $1.concat($3); }
                 ;
 type_decl       : id EQ type                            {{ $$ = {node:'type_decl',id:$1,type:$3,lineno:yylineno}; }}
                 ;
-type            : id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
-                | INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
+type            : INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
                 | STRING                                {{ $$ = {node:'type',name:'STRING'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
                 | CHAR                                  {{ $$ = {node:'type',name:'CHARACTER'}; }}
 //                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
-                /* ordinal types */
-//                | enumerated_type                       {{ }}
-//                | subrange_type                         {{ }}
-                | structured_type                         {{ $$ = $1; }}
+                | ordinal_type                          {{ $$ = $1; }}
+                | structured_type                       {{ $$ = $1; }}
                 /* pointer type */
 //                | CARET id                              {{ }}
                 ;
@@ -216,11 +213,16 @@ structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = $6;
 indexes         : indexes COMMA ordinal_type            {{ $$ = $1.concat($3); }}
                 | ordinal_type                          {{ $$ = [$1]; }}
                 ;
-ordinal_type    : subrange_type                         {{ $$ = $1; }}
+ordinal_type    : id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
+                | subrange_type                         {{ $$ = $1; }}
 //                | enumerated_type                       {{ }}
-                | id
                 ;
-subrange_type   : INTEGER_LITERAL DOT DOT INTEGER_LITERAL {{ $$ = {node:'subrange',start:parseInt($1),end:parseInt($4)}; }}
+subrange_type   : constant DOTDOT constant              {{ $$ = {node:'type',name:'SUBRANGE',start:$1,end:$3}; }}
+                | id DOTDOT id                          {{ $$ = {node:'type',name:'NAMED_SUBRANGE',start:$1,end:$3}; }}
+                ;
+constant        : INTEGER_LITERAL                       {{ $$ = parseInt($1); }}
+                | MINUS INTEGER_LITERAL                 {{ $$ = - parseInt($2); }}
+                | CHARACTER_LITERAL                     {{ $$ = $1.val; }}
                 ;
 rec_sections    : rec_sections SEMI rec_section         {{ $$ = $1.concat($3); }}
                 |                   rec_section         {{ $$ = $1; }}
@@ -320,6 +322,7 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                 | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:true}; }}
                 | FALSE_LITERAL                         {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:false}; }}
                 | lvalue                                {{ $$ = $1; }}
+                | CARET id                              {{ $$ = {node:'pointer',type:{node:'type',name:'POINTER'},id:$2}; }}
                 | LPAREN expr RPAREN                    {{ $$ = $2; }}
                 | MINUS expr                            {{ $$ = {node:'expr_unop',op:'minus',expr:$2}; }}
                 | NOT expr                              {{ $$ = {node:'expr_unop',op:'not',expr:$2}; }}

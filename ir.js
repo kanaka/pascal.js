@@ -1021,6 +1021,7 @@ function IR(theAST) {
             case 'M': ast.ilocal = 13; break;
             case '[': ast.ilocal = 27; break;
             case '?': ast.ilocal = 127; break;
+            default: throw new Error("Unknown control character " + ast.val);
           }
         }
         break;
@@ -1042,6 +1043,25 @@ function IR(theAST) {
         ast.itype = "i1";
         ast.ilocal = ast.val.toString();
         break;
+      case 'pointer':
+        if (ast.id.length === 1) {
+          try {
+            var pdecl = st.lookup(ast.id);
+          } catch(e) {
+            // HACK: we could't determine at normal parse time if this is
+            // a single character routine or if it's a control character
+            // literal. If it's a single character and defined in the
+            // symbol table then it's a pointer to a routine, otherwise
+            // it's a control character so replace the AST and
+            // evaluate it.
+            ast.node = 'character';
+            ast.type = {node:'type',name:'CHARACTER'};
+            ast.val = '^' + ast.id;
+            delete ast.id;
+            ir.push.apply(ir,toIR(ast,level,fnames));
+          }
+        }
+        break;
 
       case 'variable':
         var vdecl;
@@ -1052,8 +1072,11 @@ function IR(theAST) {
         }
 
         if (vdecl && vdecl.fparams) {
-          // This is actually a parameterless function call expression
-          // so replace the AST with a function and evalutate it
+          // HACK: we could't determine at normal parse time if the ID
+          // is a normal ID or a parameter function call. If it's
+          // defined as a function, then assume this is actually
+          // a parameterless function call expression so replace the
+          // AST with a function and evalutate it
           ast.node = 'expr_call';
           ast.call_params = [];
           ir.push.apply(ir, toIR(ast,level,fnames));
