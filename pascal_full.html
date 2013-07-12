@@ -35,8 +35,13 @@ LLVM IR:<br>
 <textarea id="the_ir" cols=90 rows=5 style="border: 1px solid black; margin-bottom: 0.6em">
 </textarea>
 <br>
-<input value="Optimize and compile IR to JS" type="button" onclick="doCompile1()">
-<input value="Compile IR to JS" type="button" onclick="doCompile2()">
+<input value="Optimize IR" type="button" onclick="doOptimize()">
+<br>
+Optimized LLVM IR:<br>
+<textarea id="the_ir2" cols=90 rows=5 style="border: 1px solid black; margin-bottom: 0.6em">
+</textarea>
+<br>
+<input value="Compile IR to JS" type="button" onclick="doCompile()">
 <br>
 Compiled JavaScript:<br>
 <textarea id="the_js" cols=90 rows=5 style="border: 1px solid black; margin-bottom: 0.6em">
@@ -93,7 +98,7 @@ Execution Output:<br>
     } catch (e) {
       outElem.style.backgroundColor = '#ffe0e0';
       outElem.value = 'Error in parsing: ' + e; // error message
-      return;
+      throw e;
     }
   }
 
@@ -114,45 +119,41 @@ Execution Output:<br>
     }
   }
 
-  function doCompile1() {
+  function doOptimize() {
     XHR_PREFIX = "llvm.js/";
     var ir = document.getElementById('the_ir').value,
-        outElem = document.getElementById('the_js'),
+        outElem = document.getElementById('the_ir2'),
         new_ir = '', js = '';
 
     try {
       new_ir = llvmDis(llvmAs(ir));
+      outElem.style.backgroundColor = '#eeffee';
+      outElem.value = new_ir;
     } catch (e) {
       outElem.style.backgroundColor = '#ffe0e0';
       outElem.value = 'Error in compilation: ' + e; // error message
-      return;
-    }
-
-    print = function(x) { js += x; };
-    compile(new_ir);
-    if (js && js[0] != 'E') {
-      outElem.style.backgroundColor = '#eeffee';
-      outElem.value = js;
-    } else {
-      outElem.style.backgroundColor = '#ffe0e0';
-      outElem.value = js; // error message
+      throw e;
     }
   }
 
-  function doCompile2() {
+  function doCompile() {
     XHR_PREFIX = "llvm.js/";
-    var ir = document.getElementById('the_ir').value,
+    var ir = document.getElementById('the_ir2').value,
         outElem = document.getElementById('the_js'),
         js = '';
 
     print = function(x) { js += x; };
-    compile(ir);
-    if (js && js[0] != 'E') {
+    try {
+      compile(ir);
+//      if (js && js[0] === 'E') {
+//          throw new Error(js);
+//      }
       outElem.style.backgroundColor = '#eeffee';
       outElem.value = js;
-    } else {
+    } catch (e) {
       outElem.style.backgroundColor = '#ffe0e0';
-      outElem.value = js; // error message
+      outElem.value = 'Error compiling to JS: ' + e; // error message
+      throw e;
     }
   }
 
@@ -168,6 +169,7 @@ Execution Output:<br>
     } catch(e) {
       outElem.style.backgroundColor = '#ffe0e0';
       outElem.value = 'Error in execution: ' + e; // error message
+      throw e;
     }
   }
 </script>

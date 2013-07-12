@@ -90,7 +90,7 @@ Execution Output:<br>
     } catch (e) {
       outElem.style.backgroundColor = '#ffe0e0';
       outElem.value = 'Error in parsing: ' + e; // error message
-      return;
+      throw e;
     }
   }
 
@@ -108,6 +108,7 @@ Execution Output:<br>
     } catch(e) {
       outElem.style.backgroundColor = '#ffe0e0';
       outElem.value = 'Error compiling to IR: ' + e; // error message
+      throw e;
     }
   }
 
@@ -118,13 +119,17 @@ Execution Output:<br>
         js = '';
 
     print = function(x) { js += x; };
-    compile(ir);
-    if (js && js[0] != 'E') {
+    try {
+      compile(ir);
+//      if (js && js[0] === 'E') {
+//          throw new Error(js);
+//      }
       outElem.style.backgroundColor = '#eeffee';
       outElem.value = js;
-    } else {
+    } catch (e) {
       outElem.style.backgroundColor = '#ffe0e0';
-      outElem.value = js; // error message
+      outElem.value = 'Error compiling to JS: ' + e; // error message
+      throw e;
     }
   }
 
@@ -140,6 +145,7 @@ Execution Output:<br>
     } catch(e) {
       outElem.style.backgroundColor = '#ffe0e0';
       outElem.value = 'Error in execution: ' + e; // error message
+      throw e;
     }
   }
 </script>

@@ -301,11 +301,10 @@ function IR(theAST) {
         // @main
         var id = ast.id,
             fparams = ast.fparams,
-            block = ast.block,
-            new_fname = st.new_name(id);
+            block = ast.block;
 
         block.param_list = [];
-        st.insert(id,{name:new_fname,level:level,fparams:fparams,lparams:[]});
+        st.insert(id,{name:id,level:level,fparams:fparams,lparams:[]});
 
         try {
           ir.push.apply(ir, toIR(block,level,fnames.concat([id])));
@@ -322,7 +321,7 @@ function IR(theAST) {
         ir.push('');
         ir.push('define i32 @main() {');
         ir.push('entry:');
-        ir.push('  %ret = call i32 @' + new_fname + '()');
+        ir.push('  %ret = call i32 @' + id + '()');
         ir.push('  ret i32 0');
         ir.push('}');
         break;
@@ -475,10 +474,9 @@ function IR(theAST) {
             type = ast.type,
             fparams = ast.fparams,
             block = ast.block,
-            new_fname = st.new_name(id),
             new_level = level+1;
 
-        st.insert(id, {name: new_fname, type:type, level: new_level,fparams:fparams,lparams:[]});
+        st.insert(id, {name: id, type:type, level: new_level,fparams:fparams,lparams:[]});
         st.begin_scope();
         ir.push.apply(ir, toIR(block,new_level,fnames.concat([id])));
         st.end_scope();
@@ -664,17 +662,17 @@ function IR(theAST) {
             br_false = br_name + '_false',
             br_done = br_name + '_done';
         ir.push('  br ' + expr.itype + ' ' + expr.ilocal + ', label %' + br_true + ', label %' + br_false);
-        ir.push('  ' + br_true + ':');
+        ir.push(br_true + ':');
         if (tstmt) {
           ir.push.apply(ir, toIR(tstmt,level,fnames));
         }
         ir.push('  br label %' + br_done); 
-        ir.push('  ' + br_false + ':');
+        ir.push(br_false + ':');
         if (fstmt) {
           ir.push.apply(ir, toIR(fstmt,level,fnames));
         }
         ir.push('  br label %' + br_done); 
-        ir.push('  ' + br_done + ':');
+        ir.push(br_done + ':');
         ir.push('  ; if statement finish');
         ir.push('');
         break;
@@ -716,12 +714,12 @@ function IR(theAST) {
         ir.push('  br label %' + for_start); 
 
         ir.push('');
-        ir.push('  ' + for_start + ':');
+        ir.push(for_start + ':');
         ir.push('  store ' + start.itype + ' ' + start.ilocal + ', ' + index.itype + '* ' + index.istack);
         ir.push('  br label %' + for_cond); 
 
         ir.push('');
-        ir.push('  ' + for_cond + ':');
+        ir.push(for_cond + ':');
         ir.push('  ' + for1 + ' = load i32* ' + index.istack);
         if (by === 1) {
           ir.push('  ' + for_cmp1 + ' = icmp sle i32 ' + for1 + ', ' + end.ilocal);
@@ -731,21 +729,21 @@ function IR(theAST) {
         ir.push('  br i1 ' + for_cmp1 + ', label %' + for_body + ', label %' + for_end);
 
         ir.push('');
-        ir.push('  ' + for_body + ':');
+        ir.push(for_body + ':');
         ir.push.apply(ir, toIR(stmt,level,fnames));
         ir.push('  ' + for2 + ' = load i32* ' + index.istack);
         ir.push('  ' + for_cmp2 + ' = icmp eq i32 ' + for2 + ', ' + end.ilocal);
         ir.push('  br i1 ' + for_cmp2 + ', label %' + for_end + ', label %' + for_inc);
 
         ir.push('');
-        ir.push('  ' + for_inc + ':');
+        ir.push(for_inc + ':');
         ir.push('  ' + for3 + ' = load i32* ' + index.istack);
         ir.push('  ' + for_inc1 + ' = add nsw i32 ' + for3 + ', ' + by);
         ir.push('  store i32 ' + for_inc1 + ', i32* ' + index.istack);
         ir.push('  br label %' + for_cond);
 
         ir.push('');
-        ir.push('  ' + for_end + ':');
+        ir.push(for_end + ':');
 
         ir.push('  ; for statement finish');
         ir.push('');
@@ -765,19 +763,19 @@ function IR(theAST) {
         ir.push('  br label %' + repeat_body); 
 
         ir.push('');
-        ir.push('  ' + repeat_body + ':');
+        ir.push(repeat_body + ':');
         for (var i=0; i < stmts.length; i++) {
           ir.push.apply(ir,toIR(stmts[i],level,fnames));
         }
         ir.push('  br label %' + repeat_cond);
 
         ir.push('');
-        ir.push('  ' + repeat_cond + ':');
+        ir.push(repeat_cond + ':');
         ir.push.apply(ir, toIR(expr,level,fnames));
         ir.push('  br i1 ' + expr.ilocal + ', label %' + repeat_end + ', label %' + repeat_body);
 
         ir.push('');
-        ir.push('  ' + repeat_end + ':');
+        ir.push(repeat_end + ':');
 
         ir.push('  ; repeat statement finish');
         ir.push('');
@@ -797,17 +795,17 @@ function IR(theAST) {
         ir.push('  br label %' + while_cond); 
 
         ir.push('');
-        ir.push('  ' + while_cond + ':');
+        ir.push(while_cond + ':');
         ir.push.apply(ir, toIR(expr,level,fnames));
         ir.push('  br i1 ' + expr.ilocal + ', label %' + while_body + ', label %' + while_end);
 
         ir.push('');
-        ir.push('  ' + while_body + ':');
+        ir.push(while_body + ':');
         ir.push.apply(ir, toIR(stmt,level,fnames));
         ir.push('  br label %' + while_cond);
 
         ir.push('');
-        ir.push('  ' + while_end + ':');
+        ir.push(while_end + ':');
 
         ir.push('  ; while statement finish');
         ir.push('');
