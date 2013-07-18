@@ -79,6 +79,8 @@ function SYSTEM (st) {
     ir.push('  ; WRITE start');
     for(var i=0; i < cparams.length; i++) {
       var param = cparams[i],
+          pitype = param.itype,
+          pilocal = param.ilocal,
           pre = st.new_name('WRITE'),
           str = '%' + pre + 'str',
           sout = '%' + pre + 'sout',
@@ -96,8 +98,8 @@ function SYSTEM (st) {
                   ' = fpext float ' + param.ilocal + ' to double');
           format = "@.float_format";
           flen = 4;
-          param.itype = "double";
-          param.ilocal = conv;
+          pitype = "double";
+          pilocal = conv;
           break;
         case 'BOOLEAN':
           var br_name = pre + 'br',
@@ -109,21 +111,31 @@ function SYSTEM (st) {
               bool_local_out = '%' + pre + 'bool_local_out';
           ir.push('  br ' + param.itype + ' ' + param.ilocal +
                   ', label %' + br_true + ', label %' + br_false);
-          ir.push('  ' + br_true + ':');
+          ir.push(br_true + ':');
           ir.push('    ' + bool_local1 +
                   ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0');
           ir.push('  br label %' + br_done);
-          ir.push('  ' + br_false + ':');
+          ir.push(br_false + ':');
           ir.push('    ' + bool_local2 +
                   ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0');
           ir.push('  br label %' + br_done);
-          ir.push('  ' + br_done + ':');
+          ir.push(br_done + ':');
           ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 +
                   ', %' + br_true + '], [ ' + bool_local2 +
                   ', %' + br_false + ']');
           format = "@.str_format";
-          param.itype = 'i8*';
-          param.ilocal = bool_local_out;
+          pitype = 'i8*';
+          pilocal = bool_local_out;
+          break;
+        case 'ENUMERATION':
+          var ctype = param.type,
+              array_idx = st.new_name('%arrayidx'),
+              str_local = st.new_name('%' + param.id + "_str");
+          format = "@.str_format"; 
+          ir.push('  ' + array_idx + ' = getelementptr ' + ctype.enum_type + '* ' + ctype.enum_var + ', i32 0, i32 ' + param.ilocal);
+          ir.push('  ' + str_local + ' = load i8** ' + array_idx);
+          pitype = 'i8*';
+          pilocal = str_local;
           break;
         default:
           throw new Error("Unknown WRITE type: " + param.type.name);
@@ -131,7 +143,7 @@ function SYSTEM (st) {
       ir.push('  ' + str + ' = getelementptr inbounds [' + flen + ' x i8]* ' +
               format + ', i32 0, i32 0');
       ir.push('  ' + call1 + ' = call i32 (i8*, ...)* @printf(i8* ' + str +
-              ', ' + param.itype + ' ' + param.ilocal + ')');
+              ', ' + pitype + ' ' + pilocal + ')');
     }
     ir.push('  ' + sout + ' = load %struct._IO_FILE** @stdout');
     ir.push('  ' + call2 + ' = call i32 @fflush(%struct._IO_FILE* ' + sout + ')');
@@ -182,6 +194,23 @@ function SYSTEM (st) {
 
   function CHR(ast, cparams) {
     return CHAR(ast, cparams);
+  }
+
+  function ORD(ast, cparams) {
+    var ir = [], clen = cparams.length,
+        id = ast.id,
+        cparam = cparams[0],
+        lname = st.new_name('%enum');
+    if (clen !== 1) {
+      throw new Error(id + " only accepts one argument (" + clen + " given)");
+    }
+    ir.push('  ; ' + id + ' start');
+    ir.push('  ' + lname + ' = load i32* ' + cparam.istack);
+    ir.push('  ; ' + id + ' finish');
+    ast.type = {node:'type',name:'INTEGER'};
+    ast.itype = 'i32';
+    ast.ilocal = lname;
+    return ir;
   }
 
   function INTEGER(ast, cparams) {
@@ -327,6 +356,9 @@ function SYSTEM (st) {
   pins('CHR', CHR,
        [{type:{node:'type',name:'INTEGER'}}],
        {node:'type',name:'CHARACTER'});
+  pins('ORD', ORD,
+       [{type:{node:'type',name:'any'}}],
+       {node:'type',name:'INTEGER'});
   pins('INTEGER', INTEGER,
        [{type:{node:'type',name:'CHARACTER'}}],
        {node:'type',name:'INTEGER'});
