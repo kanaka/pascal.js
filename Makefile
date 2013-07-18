@@ -9,17 +9,20 @@ TESTS ?= semi1 \
 	 expr1 expr2 \
 	 float1 float2 \
 	 bool1 \
-	 char1 char2 \
+	 char1 char2 char3 \
 	 const1 const2 \
 	 type1 type2 type3 \
+	 enums1 enums2 enums3 enums4 \
+	 ord1 ord2 \
+	 subrange1 subrange2 subrange3 \
 	 proc1 proc2 proc3 proc4 proc5 \
 	 func1 \
-	 string1 string2 string3 string4 string5 string6 string7 string8 string9 \
+	 string1 string2 string3 string4 string5 string6 string7 string8 string9 string10 string11 \
 	 array1 array2 array3 array4 array5 array6 array7 \
 	 record1 record2 record3 record4 \
 	 deref1 deref2 deref3 \
 	 if1 if2 \
-	 nested1 nested2 nested3 nested4 \
+	 nested1 nested2 nested3 nested4 nested5 \
 	 for1 for2 repeat1 while1 while2 \
 	 halt \
 	 delay clrscr1 gotoxy1 keypressed1 keypressed2 box \

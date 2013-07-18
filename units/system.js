@@ -200,12 +200,36 @@ function SYSTEM (st) {
     var ir = [], clen = cparams.length,
         id = ast.id,
         cparam = cparams[0],
-        lname = st.new_name('%enum');
+        ctype = cparam.type,
+        lname = st.new_name('%ord'),
+        lname1 = lname + '.1',
+        lname2 = lname + '.2';
     if (clen !== 1) {
       throw new Error(id + " only accepts one argument (" + clen + " given)");
     }
     ir.push('  ; ' + id + ' start');
-    ir.push('  ' + lname + ' = load i32* ' + cparam.istack);
+    switch (ctype.name) {
+      case 'INTEGER':
+      case 'ENUMERATION':
+        lname = cparam.ilocal;
+        break;
+      case 'CHARACTER':
+        ir.push('  ' + lname + ' = zext i8 ' + cparam.ilocal + ' to i32');
+        break;
+      case 'STRING':
+        if (cparam.val.length > 1) {
+          throw new Error("Invalid type passed to ORD: " + ctype.name);
+        }
+        ir.push('  ' + lname1 + ' = getelementptr inbounds ' + cparam.itype + ' ' + cparam.istack + ', i32 0, i32 0');
+        ir.push('  ' + lname2 + ' = load i8* ' + lname1);
+        ir.push('  ' + lname + ' = sext i8 ' + lname2 + ' to i32');
+        break;
+      case 'BOOLEAN':
+        ir.push('  ' + lname + ' = zext i1 ' + cparam.ilocal + ' to i32');
+        break;
+      default:
+        throw new Error("Invalid type passed to ORD: " + ctype.name);
+    }
     ir.push('  ; ' + id + ' finish');
     ast.type = {node:'type',name:'INTEGER'};
     ast.itype = 'i32';

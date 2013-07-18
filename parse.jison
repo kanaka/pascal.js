@@ -210,19 +210,25 @@ structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = $6;
 //                | SET OF ordinal_type                   {{ }}
 //                | FILE OF type                          {{ }}
                 ;
+ordinal_type    : enumerated_type                       {{ $$ = $1; }}
+                | id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
+                | subrange                              {{ $$ = $1; $$.node = 'type'; $$.name = 'SUBRANGE'; }}
+                ;
+enumerated_type : LPAREN literal_ids RPAREN             {{ $$ = {node:'type',name:'ENUMERATION',ids:$2}; }}
+                ;
 indexes         : indexes COMMA ordinal_type            {{ $$ = $1.concat($3); }}
                 | ordinal_type                          {{ $$ = [$1]; }}
                 ;
-ordinal_type    : id                                    {{ $$ = {node:'type',name:'NAMED',id:$1}; }}
-                | subrange_type                         {{ $$ = $1; }}
-//                | enumerated_type                       {{ }}
-                ;
-subrange_type   : constant DOTDOT constant              {{ $$ = {node:'type',name:'SUBRANGE',start:$1,end:$3}; }}
-                | id DOTDOT id                          {{ $$ = {node:'type',name:'NAMED_SUBRANGE',start:$1,end:$3}; }}
+subrange        : constant DOTDOT constant              {{ $$ = {node:'subrange',constant:true,start:$1,end:$3}; }}
+                | id DOTDOT id                          {{ $$ = {node:'subrange',constant:false,start:$1,end:$3}; }}
                 ;
 constant        : INTEGER_LITERAL                       {{ $$ = parseInt($1); }}
                 | MINUS INTEGER_LITERAL                 {{ $$ = - parseInt($2); }}
                 | CHARACTER_LITERAL                     {{ $$ = $1.val; }}
+                | STRING_LITERAL                        {{ if ($1.length !== 3) {
+                                                             throw new Error("Invalid character constant");
+                                                           }
+                                                           $$ = $1.substr(1,$1.length-2); }}
                 ;
 rec_sections    : rec_sections SEMI rec_section         {{ $$ = $1.concat($3); }}
                 |                   rec_section         {{ $$ = $1; }}
@@ -308,7 +314,7 @@ open_for_stmt   : FOR lvalue ASSIGN expr TO     expr DO open_stmt   {{ $$ = {nod
                 | FOR lvalue ASSIGN expr DOWNTO expr DO open_stmt   {{ $$ = {node:'stmt_for',index:$2,start:$4,by:-1,end:$6,stmt:$8}; }}
                 ;
 
-exprs           : exprs COMMA expr                      {{ $$= $1.concat([$3]); }}
+exprs           : exprs COMMA expr                      {{ $$ = $1.concat([$3]); }}
                 |             expr                      {{ $$ = [$1]; }}
                 ;
 expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:{node:'type',name:'INTEGER'},val:parseInt($1)}; }}
@@ -359,4 +365,11 @@ ids             : ids COMMA id                          {{ $$ = $1.concat([$3]);
                 | id                                    {{ $$ = [$1]; }}
                 ;
 id              : ID                                    {{ $$ = yytext.toUpperCase(); }}
+                ;
+// No upcasing for these since we may want to print the original
+// string value
+literal_ids     : literal_ids COMMA literal_id          {{ $$ = $1.concat([$3]); }}
+                | literal_id                            {{ $$ = [$1]; }}
+                ;
+literal_id      : ID                                    {{ $$ = yytext; }}
                 ;

@@ -136,6 +136,17 @@ function IR(theAST) {
       var tdecl = st.lookup(t.id);
       t = tdecl.type;
     }
+    if (t.name === 'SUBRANGE') {
+      if (typeof t.start === 'number') {
+        t.name = 'INTEGER';
+      } else if (typeof t.start === 'string' && t.start.length === 1) {
+        t.name = 'CHARACTER';
+      } else {
+        var tdecl = st.lookup(t.start);
+        t = tdecl.type;
+        t.itype = type;
+      }
+    }
     if (t.name === 'STRING') {
       if (typeof t.index === 'undefined') {
         t.index = {node:'subrange',start:1};
@@ -258,7 +269,7 @@ function IR(theAST) {
     if (level === 0) {
       // global scope
       var sname = "@" + st.new_name(id);
-      ir.push([sname + ' = common global ' + vtype.lltype + ' ' + vdef]);
+      ir.push([sname + ' = private global ' + vtype.lltype + ' ' + vdef]);
     } else {
       // sub-program scope
       var sname = "%" + st.new_name(id + "_stack");
@@ -267,30 +278,6 @@ function IR(theAST) {
     }
 
     st.insert(id,{node:node,type:vtype,sname:sname,level:pdecl.level});
-    return sname;
-  }
-
-  function allocate_enum(ir,eid,fname,type,idx) {
-    var pdecl = st.lookup(fname),
-        eidUp = eid.toUpperCase(),
-        level = pdecl.level,
-        vtype = annotate_type(type),
-        repr = "@" + st.new_name(eidUp);
-
-    ir.push([repr + ' = common global [' + (eid.length+1) + ' x i8] c"' + eid + '\\00"']);
-
-    if (level === 0) {
-      // global scope
-      var sname = "@" + st.new_name(eid);
-      ir.push([sname + ' = common global ' + vtype.lltype + ' ' + idx]);
-    } else {
-      // sub-program scope
-      var sname = "%" + st.new_name(eid + "_stack");
-      ir.push('  ' + sname + ' = alloca ' + vtype.lltype);
-      ir.push('  store ' + vtype.lltype + ' ' + idx + ', ' + vtype.lltype + '* ' + sname);
-    }
-
-    st.insert(eidUp,{node:'enum_decl',type:vtype,sname:sname,level:pdecl.level,repr:repr});
     return sname;
   }
 
@@ -1158,11 +1145,11 @@ function IR(theAST) {
           ast.istack = new_sname;
         }
 
+        ir.push('  ' + lname + ' = load ' + vtype.lltype + '* ' + vdecl.sname);
         ast.type = vtype;
         ast.itype = vtype.lltype;
         ast.ilocal = lname;
         ast.istack = vdecl.sname;
-        ir.push('  ' + ast.ilocal + ' = load ' + vtype.lltype + '* ' + ast.istack);
         break;
 
       default:
