@@ -136,23 +136,17 @@ function IR(theAST) {
       var tdecl = st.lookup(t.id);
       t = tdecl.type;
     }
+    // TODO: simplify/clean this up
     if (t.name === 'SUBRANGE') {
-      if (typeof t.start === 'number') {
+      var node = t.start.node;
+      if (node === 'integer') {
         t.name = 'INTEGER';
-      } else if (typeof t.start === 'string' && t.start.length === 1) {
+      } else if (node === 'character') {
         t.name = 'CHARACTER';
       } else {
-        var tdecl = st.lookup(t.start);
+        var tdecl = st.lookup(t.start.id);
         t = tdecl.type;
         t.itype = type;
-      }
-    }
-    if (t.name === 'STRING') {
-      if (typeof t.index === 'undefined') {
-        t.index = {node:'subrange',start:1};
-      }
-      if (typeof t.type === 'undefined') {
-        t.type = {node:'type',name:'CHARACTER'};
       }
     }
     return t;
@@ -177,8 +171,8 @@ function IR(theAST) {
         break;
       case 'ARRAY':
         var index = t.index,
-            start = index.start,
-            end = index.end,
+            start = index.start.val,
+            end = index.end.val,
             vdefs = [],
             ttype = annotate_type(t.type);
         lltype = '[' + (end-start+1) + ' x ' + ttype.lltype + ']';
@@ -550,15 +544,7 @@ function IR(theAST) {
           listack = lvalue.istack;
         }
 
-        if (lvalue.type.name === 'CHARACTER' && expr.type.name === 'STRING') {
-          // coerce string to character
-          // TODO: assert that STRING is length of 1
-          var decay = '%' + st.new_name('arraydecay'),
-              chr = '%' + st.new_name('chr');
-          ir.push('  ' + decay + ' = getelementptr inbounds ' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0');
-          ir.push('  ' + chr + ' = load i8* ' + decay); 
-          ir.push('  store i8 ' + chr + ', ' + litype + '* ' + listack);
-        } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING' && expr.val) {
+        if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING' && expr.val) {
           // string literal being assigned to string variable
           ir.push('  store i8* getelementptr inbounds (' + expr.itype + ' ' + expr.istack + ', i32 0, i32 0), ' + litype + '* ' + listack);
         } else if (lvalue.type.name === 'STRING' && expr.type.name === 'STRING') {
@@ -636,12 +622,21 @@ function IR(theAST) {
                             " parameter(s) required but " + i +
                             " given")
           }
-          var ctype = cparam.type.name;
-          if (ctype !== ftype) {
-            var cname = cparam.id ? cparam.id : "'" + cparam.val + "'";
-            throw new Error("Parameter mismatch calling " +
-                            id + ": " + cname + ":" + ctype +
-                            " given, but definition is " + ftype);
+          var cname = cparam.id ? cparam.id : "'" + cparam.val + "'",
+              ctype = cparam.type.name;
+          if (ftype === 'multiple') {
+            var ftypes = fparam.type.names;
+            if (ftypes.indexOf(ctype) < 0) {
+              throw new Error("Parameter mismatch calling " +
+                              id + ": " + cname + ":" + ctype +
+                              " given, but definition is " + ftypes);
+            }
+          } else {
+            if (ctype !== ftype) {
+              throw new Error("Parameter mismatch calling " +
+                              id + ": " + cname + ":" + ctype +
+                              " given, but definition is " + ftype);
+            }
           }
         }
         if (pdecl.evalfn) {
@@ -902,9 +897,11 @@ function IR(theAST) {
           }
           resType={node:'type',name:'BOOLEAN',lltype:'i1'};
         } else if (ast.op === "plus" &&
-                    ltype.name === 'STRING' && rtype.name === 'STRING') {
+            (ltype.name === 'STRING' || ltype.name === 'CHARACTER') &&
+            (rtype.name === 'STRING' || rtype.name === 'CHARACTER')) {
          // string concatenation shorthand
-         resType = annotate_type({node:'type',name:'STRING'});
+         resType = annotate_type({node:'type',name:'STRING',
+                                  type:{node:'type',name:'CHARACTER'}});
         } else if (ast.op in {plus:1,minus:1,star:1,slash:1,div:1,mod:1}) {
           if (ast.op === 'slash') {
             resType = {node:'type',name:'REAL',lltype:"float"};
@@ -992,7 +989,7 @@ function IR(theAST) {
             aoff = aname + 'off',
             aval = aname + 'val';
         // TODO: bounds checking
-        start = atype.index.start;
+        start = atype.index.start.val;
         rtype = atype.type;
         ritype = atype.type.lltype;
         if (atype.name === 'STRING') {
@@ -1039,22 +1036,7 @@ function IR(theAST) {
         break;
       case 'character':
         ast.itype = "i8";
-        if (ast.val[0] === "#") {
-          ast.ilocal = parseInt(ast.val.slice(1),10);
-        } else {
-          switch (ast.val[1]) {
-            case '@': ast.ilocal = 0; break;
-            case 'G': ast.ilocal = 7; break;
-            case 'H': ast.ilocal = 8; break;
-            case 'I': ast.ilocal = 9; break;
-            case 'J': ast.ilocal = 10; break;
-            case 'L': ast.ilocal = 12; break;
-            case 'M': ast.ilocal = 13; break;
-            case '[': ast.ilocal = 27; break;
-            case '?': ast.ilocal = 127; break;
-            default: throw new Error("Unknown control character " + ast.val);
-          }
-        }
+        ast.ilocal = ast.val;
         break;
       case 'string':
         var slen = ast.val.length+1,
@@ -1083,13 +1065,25 @@ function IR(theAST) {
             // a single character routine or if it's a control character
             // literal. If it's a single character and defined in the
             // symbol table then it's a pointer to a routine, otherwise
-            // it's a control character so replace the AST and
-            // evaluate it.
+            // it's a control character so update the AST (i.e. late
+            // parse)
+            switch (ast.id) {
+              case '@': ast.val = 0; break;
+              case 'G': ast.val = 7; break;
+              case 'H': ast.val = 8; break;
+              case 'I': ast.val = 9; break;
+              case 'J': ast.val = 10; break;
+              case 'L': ast.val = 12; break;
+              case 'M': ast.val = 13; break;
+              case '[': ast.val = 27; break;
+              case '?': ast.val = 127; break;
+              default: throw new Error("Unknown control character " + ast.id);
+            }
             ast.node = 'character';
             ast.type = {node:'type',name:'CHARACTER'};
-            ast.val = '^' + ast.id;
+            ast.itype = "i8";
+            ast.ilocal = ast.val;
             delete ast.id;
-            ir.push.apply(ir,toIR(ast,level,fnames));
           }
         }
         break;

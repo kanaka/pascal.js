@@ -17,7 +17,7 @@ TESTS ?= semi1 \
 	 subrange1 subrange2 subrange3 \
 	 proc1 proc2 proc3 proc4 proc5 \
 	 func1 \
-	 string1 string2 string3 string4 string5 string6 string7 string8 string9 string10 string11 \
+	 string1 string2 string3 string4 string5 string6 string7 string8 string9 string10 string11 string12 \
 	 array1 array2 array3 array4 array5 array6 array7 \
 	 record1 record2 record3 record4 \
 	 deref1 deref2 deref3 \

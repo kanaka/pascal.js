@@ -273,19 +273,28 @@ function SYSTEM (st) {
     ir.push('  ' + prev_tsize + ' = add i64 0, 0');
     for (var i=0; i < cparams.length; i++) {
         cparam = cparams[i];
-        if (cparam.type.name !== 'STRING') {
+        if (cparam.type.name !== 'STRING' && cparam.type.name !== 'CHARACTER') {
             throw new Error("Concat arguments must be STRINGs");
         }
         var decay = st.new_name('%decay'),
+            idx1 = st.new_name('%idx'),
+            idx2 = st.new_name('%idx'),
             size = st.new_name('%size'),
             tsize = st.new_name('%tsize'),
             ret = st.new_name('%ret');
 
-        ir.push('  ' + decay + ' = bitcast ' + cparam.itype + ' ' + cparam.ilocal + ' to i8*');
-        ir.push('  ' + size + ' = call i64 @strlen(i8* ' + decay + ')');
-        ir.push('  ' + tsize + ' = add i64 ' + size + ', ' + prev_tsize);
+        if (cparam.type.name === 'CHARACTER') {
+          ir.push('  ' + tsize + ' = add i64 1, ' + prev_tsize);
+          ir.push('  ' + decay + ' = alloca i8');
+          ir.push('  store i8 ' + cparam.ilocal + ', i8* ' + decay);
+          size = 1;
+        } else {
+          ir.push('  ' + decay + ' = bitcast ' + cparam.itype + ' ' + cparam.ilocal + ' to i8*');
+          ir.push('  ' + size + ' = call i64 @strlen(i8* ' + decay + ')');
+          ir.push('  ' + tsize + ' = add i64 ' + size + ', ' + prev_tsize);
+        }
+        ir_after.push('  ' + ret + ' = call i8* @strncat(i8* ' + lname + ', i8* ' + decay + ', i64 ' + size + ')');
         prev_tsize = tsize;
-        ir_after.push('  ' + ret + ' = call i8* @strncat(i8* ' + lname + ', i8* ' + decay + ', i64' + size + ')');
     }
     ir.push('  ' + new_tsize + ' = add i64 ' + prev_tsize + ', 1');
     ir.push('  ' + lname + ' = call i8* @malloc(i64 ' + new_tsize + ')');
@@ -388,8 +397,8 @@ function SYSTEM (st) {
        {node:'type',name:'INTEGER'});
   // String routines
   pins('CONCAT', CONCAT,
-       [{type:{node:'type',name:'STRING'}},
-        {type:{node:'type',name:'STRING'}},
+       [{type:{node:'type',name:'multiple',names:['STRING','CHARACTER']}},
+        {type:{node:'type',name:'multiple',names:['STRING','CHARACTER']}},
         {type:{node:'type',name:'varargs'}}],
        {node:'type',name:'STRING'});
   // Miscellaneous routines

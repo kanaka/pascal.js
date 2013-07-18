@@ -5,11 +5,11 @@
 %options case-insensitive
 %s comment
 
-STRING                  "'"(?:[^']+|"''")*"'"
+STRING                  "'"(?:[^']+|"''")(?:[^']+|"''")+"'"
 REAL                    [0-9]+"."[0-9]+
 INTEGER                 [0-9]+
 BOOLEAN                 "TRUE"|"FALSE"
-CHARACTER               "#"[0-9]+
+CHARACTER               "#"[0-9]+|"'"([^']+|"''")"'"
 ID                      [A-Za-z_][A-Za-z0-9_]*
 WHITESPACE              \s+
 
@@ -193,7 +193,6 @@ type_decl       : id EQ type                            {{ $$ = {node:'type_decl
                 ;
 type            : INTEGER                               {{ $$ = {node:'type',name:'INTEGER'}; }}
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
-                | STRING                                {{ $$ = {node:'type',name:'STRING'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
                 | CHAR                                  {{ $$ = {node:'type',name:'CHARACTER'}; }}
 //                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
@@ -202,7 +201,13 @@ type            : INTEGER                               {{ $$ = {node:'type',nam
                 /* pointer type */
 //                | CARET id                              {{ }}
                 ;
-structured_type : ARRAY LBRACK indexes RBRACK OF type   {{ $$ = $6;
+structured_type : STRING                                {{ $$ = {node:'type',name:'STRING'};
+                                                           $$.type = {node:'type',name:'CHARACTER'};
+                                                           $$.index ={start:{val:1} }; }}
+                | STRING LBRACK INTEGER_LITERAL RBRACK  {{ $$ = {node:'type',name:'STRING'};
+                                                           $$.type = {node:'type',name:'CHARACTER'};
+                                                           $$.index ={start:{val:1},end:{val:parseInt($3)} }; }}
+                | ARRAY LBRACK indexes RBRACK OF type   {{ $$ = $6;
                                                            for(var i=$3.length-1; i >= 0; i--) {
                                                              $$ = {node:'type',name:'ARRAY',type:$$,index:$3[i]}; } }}
                 | RECORD rec_sections END               {{ $$ = {node:'type',name:'RECORD',sections:$2}; }}
@@ -219,16 +224,9 @@ enumerated_type : LPAREN literal_ids RPAREN             {{ $$ = {node:'type',nam
 indexes         : indexes COMMA ordinal_type            {{ $$ = $1.concat($3); }}
                 | ordinal_type                          {{ $$ = [$1]; }}
                 ;
-subrange        : constant DOTDOT constant              {{ $$ = {node:'subrange',constant:true,start:$1,end:$3}; }}
-                | id DOTDOT id                          {{ $$ = {node:'subrange',constant:false,start:$1,end:$3}; }}
-                ;
-constant        : INTEGER_LITERAL                       {{ $$ = parseInt($1); }}
-                | MINUS INTEGER_LITERAL                 {{ $$ = - parseInt($2); }}
-                | CHARACTER_LITERAL                     {{ $$ = $1.val; }}
-                | STRING_LITERAL                        {{ if ($1.length !== 3) {
-                                                             throw new Error("Invalid character constant");
-                                                           }
-                                                           $$ = $1.substr(1,$1.length-2); }}
+subrange        : constant_num DOTDOT constant_num      {{ $$ = {node:'subrange',start:$1,end:$3}; }}
+                | character DOTDOT character            {{ $$ = {node:'subrange',start:$1,end:$3}; }}
+                | id DOTDOT id                          {{ $$ = {node:'subrange',start:{node:'variable',id:$1},end:{node:'variable',id:$3} }; }}
                 ;
 rec_sections    : rec_sections SEMI rec_section         {{ $$ = $1.concat($3); }}
                 |                   rec_section         {{ $$ = $1; }}
@@ -323,8 +321,8 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                                                                re = /''/g,
                                                                val = raw.replace(re, "'");
                                                            $$ = {node:'string',val:val,type:{node:'type',name:'STRING'},
-                                                                 index:{node:'subrange',start:1,end:val.length+1} }; }}
-                | CHARACTER_LITERAL                     {{ $$ = {node:'character',type:{node:'type',name:'CHARACTER'},val:$1}; }}
+                                                                 index:{node:'subrange',start:{val:1},end:{val:val.length+1} } }; }}
+                | character                             {{ $$ = $1; }}
                 | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:true}; }}
                 | FALSE_LITERAL                         {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:false}; }}
                 | lvalue                                {{ $$ = $1; }}
@@ -366,6 +364,18 @@ ids             : ids COMMA id                          {{ $$ = $1.concat([$3]);
                 ;
 id              : ID                                    {{ $$ = yytext.toUpperCase(); }}
                 ;
+
+constant_num    : INTEGER_LITERAL                       {{ $$ = {node:'integer',type:{node:'type',name:'INTEGER'},val:parseInt($1)}; }}
+                | MINUS INTEGER_LITERAL                 {{ $$ = {node:'integer',type:{node:'type',name:'INTEGER'},val:-parseInt($1)}; }}
+                ;
+character       : CHARACTER_LITERAL                     {{ $$ = {node:'character',type:{node:'type',name:'CHARACTER'} };
+                                                           if ($1[0] === "'") {
+                                                             $$.val = $1.substr(1,$1.length-2).charCodeAt(0);
+                                                           } else {
+                                                             $$.val = parseInt($1.substr(1),10);
+                                                           } }}
+                ;
+
 // No upcasing for these since we may want to print the original
 // string value
 literal_ids     : literal_ids COMMA literal_id          {{ $$ = $1.concat([$3]); }}
