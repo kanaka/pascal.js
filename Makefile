@@ -23,6 +23,7 @@ TESTS ?= semi1 \
 	 record1 record2 record3 record4 \
 	 deref1 deref2 deref3 \
 	 if1 if2 \
+	 case1 \
 	 nested1 nested2 nested3 nested4 nested5 \
 	 for1 for2 repeat1 while1 while2 \
 	 halt \

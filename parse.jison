@@ -73,6 +73,7 @@ WHITESPACE              \s+
 "DO"                    return "DO";
 "DOWNTO"                return "DOWNTO";
 "ELSE"                  return "ELSE";
+"OTHERWISE"             return "OTHERWISE";
 "END"                   return "END";
 "EXTERNAL"              return "EXTERNAL";
 "FILE"                  return "FILE";
@@ -182,7 +183,8 @@ decl            : CONST const_decls SEMI                {{ $$ = $2; }}
 const_decls     : const_decls SEMI const_decl           {{ $$ = $1.concat($3); }}
                 |                  const_decl           {{ $$ = [$1]; }}
                 ;
-const_decl      : id EQ expr                            {{ $$ = {node:'const_decl',id:$1,expr:$3,lineno:yylineno}; }}
+const_decl      : id            EQ expr                 {{ $$ = {node:'const_decl',id:$1,expr:$3,lineno:yylineno}; }}
+                | id COLON type EQ expr                 {{ $$ = {node:'const_decl',id:$1,type:$3,expr:$5,lineno:yylineno}; }}
                 ;
 type_decls      : type_decls SEMI type_decl             {{ $$ = $1.concat($3); }}
                 |                 type_decl             {{ $$ = [$1]; }}
@@ -291,6 +293,7 @@ closed_stmt     : lvalue ASSIGN expr                    {{ $$ = {node:'stmt_assi
                 | lvalue                                {{ $$ = {node:'stmt_call',id:$1.id,call_params:[]}; }}
                 | cstmt                                 {{ $$ = {node:'stmt_compound',stmts:$1}; }}
                 | closed_if_stmt                        {{ $$ = $1; }}
+                | case_stmt                             {{ $$ = $1; }}
                 | closed_for_stmt                       {{ $$ = $1; }}
                 | repeat_stmt                           {{ $$ = $1; }}
                 | closed_while_stmt                     {{ $$ = $1; }}
@@ -316,6 +319,24 @@ closed_for_stmt : FOR lvalue ASSIGN expr TO     expr DO closed_stmt {{ $$ = {nod
                 ;
 open_for_stmt   : FOR lvalue ASSIGN expr TO     expr DO open_stmt   {{ $$ = {node:'stmt_for',index:$2,start:$4,by:1, end:$6,stmt:$8}; }}
                 | FOR lvalue ASSIGN expr DOWNTO expr DO open_stmt   {{ $$ = {node:'stmt_for',index:$2,start:$4,by:-1,end:$6,stmt:$8}; }}
+                ;
+case_stmt       : CASE expr OF cases END                          {{ $$ = {node:'stmt_case',expr:$2,cases:$4,otherwise_stmt:[]}; }}
+                | CASE expr OF cases SEMI END                     {{ $$ = {node:'stmt_case',expr:$2,cases:$4,otherwise_stmt:[]};  }}
+                | CASE expr OF cases OTHERWISE stmt END           {{ $$ = {node:'stmt_case',expr:$2,cases:$4,otherwise_stmt:$6};  }}
+                | CASE expr OF cases SEMI OTHERWISE stmt END      {{ $$ = {node:'stmt_case',expr:$2,cases:$4,otherwise_stmt:$6};  }}
+                | CASE expr OF cases OTHERWISE stmt SEMI END      {{ $$ = {node:'stmt_case',expr:$2,cases:$4,otherwise_stmt:$6};  }}
+                | CASE expr OF cases SEMI OTHERWISE stmt SEMI END {{ $$ = {node:'stmt_case',expr:$2,cases:$4,otherwise_stmt:$7};  }}
+                ;
+cases           : cases SEMI case                       {{ $$ = $1.concat($3); }}
+                | case                                  {{ $$ = [$1]; }}
+                ;
+case            : case_indexes COLON stmt               {{ $$ = {node:'case',indexes:$1,stmt:$3}; }}
+                ;
+case_indexes    : case_indexes COMMA case_index         {{ $$ = $1.concat([$3]); }}
+                |                    case_index         {{ $$ = [$1]; }}
+                ;
+case_index      : constant                              {{ $$ = $1; }}
+                | subrange                              {{ $$ = $1; }}
                 ;
 
 exprs           : exprs COMMA expr                      {{ $$ = $1.concat([$3]); }}

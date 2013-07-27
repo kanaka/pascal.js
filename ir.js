@@ -841,6 +841,52 @@ function IR(theAST) {
         ir.push('');
         break;
 
+      case 'stmt_case':
+        var expr = ast.expr,
+            cases = ast.cases,
+            otherwise_stmt = ast.otherwise_stmt,
+            br_name = st.new_name('br'),
+            br_done = br_name + '_done';
+
+        ir.push('');
+        ir.push('  ; case statement start');
+        ir.push.apply(ir, toIR(expr,level,fnames));
+
+        for (var i=0; i < cases.length; i++) {
+          var indexes = cases[i].indexes,
+              stmt = cases[i].stmt;
+          for (var j=0; j < indexes.length; j++) {
+            var index = indexes[j],
+                cmp = st.new_name('%' + br_name + '_cmp'),
+                cmp2 = st.new_name('%' + br_name + '_cmp'),
+                br_curr = st.new_name(br_name),
+                br_curr2 = st.new_name(br_name),
+                br_next = st.new_name(br_name);
+            if (index.node === 'constant') {
+              ir.push('  ' + cmp + ' = icmp eq i32 ' + index.val + ', ' + expr.ilocal);
+              ir.push('  br i1 ' + cmp + ', label %' + br_curr + ', label %' + br_next);
+            } else {
+              ir.push('  ' + cmp + ' = icmp sgt i32 ' + index.start.val + ', ' + expr.ilocal);
+              ir.push('  br i1 ' + cmp + ', label %' + br_next + ', label %' + br_curr2);
+              ir.push(br_curr2 + ':');
+              ir.push('  ' + cmp2 + ' = icmp slt i32 ' + index.end.val + ', ' + expr.ilocal);
+              ir.push('  br i1 ' + cmp2 + ', label %' + br_next + ', label %' + br_curr);
+            }
+            ir.push(br_curr + ':');
+            ir.push.apply(ir, toIR(stmt,level,fnames));
+            ir.push('  br label %' + br_done);
+            ir.push(br_next + ':');
+          }
+        }
+        if (otherwise_stmt) {
+          ir.push('  ; case statement otherwise');
+          ir.push.apply(ir, toIR(otherwise_stmt,level,fnames));
+        }
+        ir.push('  br label %' + br_done);
+        ir.push(br_done + ':');
+        ir.push('  ; case statement finish');
+        break;
+
       case 'stmt_for':
         var index = ast.index,
             start = ast.start,
