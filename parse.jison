@@ -77,6 +77,7 @@ WHITESPACE              \s+
 "EXTERNAL"              return "EXTERNAL";
 "FILE"                  return "FILE";
 "FOR"                   return "FOR";
+"FORWARD"               return "FORWARD";
 "FUNCTION"              return "FUNCTION";
 "GOTO"                  return "GOTO";
 "IF"                    return "IF";
@@ -249,10 +250,14 @@ var_decl        : ids COLON type                        {{ $$ = [];
 
 proc_decl       : id formal_params SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:$4,lineno:yylineno}; }}
                 | id               SEMI block           {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:$3,lineno:yylineno}; }}
+                | id formal_params SEMI FORWARD         {{ $$ = {node:'proc_decl',id:$1,fparams:$2,block:'forward',lineno:yylineno}; }}
+                | id               SEMI FORWARD         {{ $$ = {node:'proc_decl',id:$1,fparams:[],block:'forward',lineno:yylineno}; }}
                 |
                 ;
-func_decl       : id formal_params COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6,lineno:yylineno}; }}
-                | id               COLON type SEMI block  {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5,lineno:yylineno}; }}
+func_decl       : id formal_params COLON type SEMI block   {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:$6,lineno:yylineno}; }}
+                | id               COLON type SEMI block   {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:$5,lineno:yylineno}; }}
+                | id formal_params COLON type SEMI FORWARD {{ $$ = {node:'func_decl',id:$1,fparams:$2,type:$4,block:'forward',lineno:yylineno}; }}
+                | id               COLON type SEMI FORWARD {{ $$ = {node:'func_decl',id:$1,fparams:[],type:$3,block:'forward',lineno:yylineno}; }}
                 |
                 ;
 formal_params   : LPAREN fp_sections RPAREN             {{ $$ = $2; }}

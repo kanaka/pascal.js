@@ -9,11 +9,11 @@ TESTS ?= semi1 \
 	 expr1 expr2 \
 	 float1 float2 \
 	 bool1 bool2 \
-	 char1 char2 char3 \
+	 char1 char2 char3 char4 \
 	 byte1 byte2 byte3 byte4 \
 	 const1 const2 \
 	 type1 type2 type3 \
-	 enums1 enums2 enums3 enums4 \
+	 enums1 enums2 enums3 enums4 enums5 \
 	 ord1 ord2 \
 	 subrange1 subrange2 subrange3 subrange4 subrange5 subrange6 \
 	 proc1 proc2 proc3 proc4 proc5 \
@@ -30,7 +30,7 @@ TESTS ?= semi1 \
 	 random1 random2 \
 	 \
 	 pfib ffib area qsort \
-	 book9-4 \
+	 book9-4 catch222 \
 	 \
 	 fail_param1 fail_param2 fail_param3 fail_param4 \
 	 fail_func1 fail_func2

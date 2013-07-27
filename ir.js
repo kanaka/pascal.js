@@ -628,9 +628,11 @@ function IR(theAST) {
             new_level = level+1;
 
         st.insert(id, {name: id, type:type, level: new_level,fparams:fparams,lparams:[]});
-        st.begin_scope();
-        ir.push.apply(ir, toIR(block,new_level,fnames.concat([id])));
-        st.end_scope();
+        if (block !== 'forward') {
+          st.begin_scope();
+          ir.push.apply(ir, toIR(block,new_level,fnames.concat([id])));
+          st.end_scope();
+        }
         break;
 
       case 'stmt_assign':
