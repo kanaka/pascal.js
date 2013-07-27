@@ -151,7 +151,7 @@ function IR(theAST) {
   // Resolve a type definition to add lltype containing LLVM type
   // string. If the type is a named type then it will be resolved to
   // a base type first.
-  function annotate_type(type) {
+  function normalize_type(type) {
     var t = expand_type(type), // implicit copy
         lltype, vdef = "0",
         name = (typeof t.origname !== 'undefined') ? t.origname : t.name;
@@ -160,14 +160,14 @@ function IR(theAST) {
 
       // structured datatypes
       case 'STRING':
-        t.type = annotate_type(t.type);
+        t.type = normalize_type(t.type);
         lltype = "i8*";
         vdef = "null";
         break;
       case 'ARRAY':
         var start, end, vdefs, ttype;
-        t.index = annotate_type(t.index);
-        t.type = annotate_type(t.type);
+        t.index = normalize_type(t.index);
+        t.type = normalize_type(t.type);
         start = t.index.start;
         end = t.index.end;
         vdefs = [];
@@ -184,7 +184,7 @@ function IR(theAST) {
         t.component_map = {};
         for (var i=0; i<sections.length; i++) {
           var comp = sections[i];
-          comp.type = annotate_type(comp.type);
+          comp.type = normalize_type(comp.type);
           comps.push(comp.type.lltype);
           vdefs.push(comp.type.lltype + ' ' + comp.type.default_value);
           t.component_map[comp.id] = i;
@@ -200,12 +200,24 @@ function IR(theAST) {
         }
         lltype = "i32";
         vdef = 0;
+        start = -32768;
+        end = 32767;
+        break;
+      case 'BYTE':
+        t.name = 'INTEGER';
+        t.origname = 'BYTE';
+        lltype = "i8";
+        vdef = 0;
+        start = 0;
+        end = 255;
         break;
       case 'CHARACTER':
         t.name = 'INTEGER';
         t.origname = 'CHARACTER';
         lltype = "i8";
         vdef = 0;
+        start = 0;
+        end = 255;
         break;
       case 'SUBRANGE':
         if (typeof t.origname !== 'undefined') {
@@ -219,7 +231,7 @@ function IR(theAST) {
             stype1, stype2;
         if (start.stype === 'variable') {
           var decl1 = st.lookup(t.start.val),
-              type1 = annotate_type(decl1.type);
+              type1 = normalize_type(decl1.type);
           stype1 = type1.name;
           start = type1.default_value;
 
@@ -239,6 +251,7 @@ function IR(theAST) {
 
           switch (stype1) {
             case 'BOOLEAN':   t.lltype = 'i1'; break;
+            case 'BYTE':      t.lltype = 'i8'; break;
             case 'CHARACTER': t.lltype = 'i8'; break;
             case 'INTEGER':   t.lltype = 'i32'; break;
             default: throw new Error("Unknown SUBRANGE type: " + stype1);
@@ -247,7 +260,7 @@ function IR(theAST) {
 
         if (end.stype === 'variable') {
           var decl2 = st.lookup(t.end.val),
-              type2 = annotate_type(decl2.type);
+              type2 = normalize_type(decl2.type);
           stype2 = type2.name;
           end = type2.default_value;
         } else {
@@ -306,10 +319,11 @@ function IR(theAST) {
   function isScalar(type) {
     var t = expand_type(type);
     var res = false;
+    // BOOLEAN, BYTE, CHARACTER, etc are all name INTEGER with an
+    // origname subtype
     switch (t.name) {
       case 'INTEGER':   res = true; break;
       case 'REAL':      res = true; break;
-      case 'CHARACTER': res = true; break;
     }
     return res;
   }
@@ -494,7 +508,7 @@ function IR(theAST) {
         // Regular formal parameters
         for (var i=0; i < fparams.length; i++) {
           var fparam = fparams[i];
-          fparam.type = annotate_type(fparam.type);
+          fparam.type = normalize_type(fparam.type);
           var ftype = fparam.type,
               lltype = ftype.lltype,
               pname = "%" + st.new_name(fparam.id + "_fparam"),
@@ -543,7 +557,7 @@ function IR(theAST) {
           var lparam = lparams[i],
               ldecl = st.lookup(lparam.id),
               sname = ldecl.sname;
-          ldecl.type = annotate_type(ldecl.type);
+          ldecl.type = normalize_type(ldecl.type);
           lparam_list.push(ldecl.type.lltype + '* ' + sname);
         }
         param_list = lparam_list.concat(param_list);
@@ -580,7 +594,7 @@ function IR(theAST) {
         if (ast.type.name === 'ENUMERATION') {
           ast.type = allocate_enums(ir,ast.type.ids,fname,ast.type,'i8');
         }
-        ast.type = annotate_type(ast.type);
+        ast.type = normalize_type(ast.type);
         st.insert(id,{node:'type_decl',id:id,type:ast.type});
         break;
 
@@ -589,7 +603,7 @@ function IR(theAST) {
         if (ast.type.name === 'ENUMERATION') {
           allocate_enums(ir,ast.type.ids,fname,ast.type,'i8');
         }
-        ast.type = annotate_type(ast.type);
+        ast.type = normalize_type(ast.type);
         allocate_variable(ir,'var_decl',ast.id,fname,ast.type);
         break;
 
@@ -598,7 +612,7 @@ function IR(theAST) {
             expr = ast.expr;
 
         ir.push.apply(ir, toIR(expr,level,fnames));
-        expr.type = annotate_type(expr.type);
+        expr.type = normalize_type(expr.type);
 
         var sname = allocate_variable(ir,'const_decl',id,fname,expr.type,expr.val);
 
@@ -631,7 +645,7 @@ function IR(theAST) {
           // return value for the function so we don't evaluate the
           // lvalue
           var pdecl = st.lookup(fname);
-          pdecl.type = annotate_type(pdecl.type);
+          pdecl.type = normalize_type(pdecl.type);
           lvalue.type = pdecl.type;
           lvalue.itype = pdecl.type.lltype;
           pdecl.ireturn = true;
@@ -667,6 +681,11 @@ function IR(theAST) {
           var conv = st.new_name("%conv");
           ir.push('  ' + conv + ' = sitofp i32 ' + expr.ilocal + ' to float');
           ir.push('  store float ' + conv + ', ' + litype + '* ' + listack);
+        } else if (lvalue.type.origname === 'BYTE' && expr.type.origname === 'INTEGER') {
+          // coerce integer to byte
+          var conv = st.new_name("%conv");
+          ir.push('  ' + conv + ' = trunc i32 ' + expr.ilocal + ' to i8');
+          ir.push('  store i8 ' + conv + ', ' + litype + '* ' + listack);
         } else if (lvalue.type.name !== expr.type.name) {
           throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
         } else if (lvalue.type.origname !== expr.type.origname) {
@@ -755,7 +774,7 @@ function IR(theAST) {
             var lparam = lparams[i],
                 lltype = null;
             ir.push.apply(ir, toIR(lparam,level,fnames));
-            lparam.type = annotate_type(lparam.type),
+            lparam.type = normalize_type(lparam.type),
             param_list.push(lparam.type.lltype + "* " + lparam.istack);
           }
           for(var i=0; i < cparams.length; i++) {
@@ -775,7 +794,7 @@ function IR(theAST) {
           }
           if (node === 'expr_call') {
             var ret = '%' + st.new_name(pdecl.name + "_ret");
-            pdecl.type = annotate_type(pdecl.type);
+            pdecl.type = normalize_type(pdecl.type);
             var lltype = pdecl.type.lltype;
             ir.push('  ' + ret + ' = call ' + lltype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
             ast.type = pdecl.type;
@@ -970,8 +989,8 @@ function IR(theAST) {
           
         ir.push.apply(ir, toIR(left,level,fnames));
         ir.push.apply(ir, toIR(right,level,fnames));
-        ltype = left.type = annotate_type(left.type);
-        rtype = left.type = annotate_type(right.type);
+        ltype = left.type = normalize_type(left.type);
+        rtype = left.type = normalize_type(right.type);
         if (ast.op in {gt:1,lt:1,geq:1,leq:1,eq:1,neq:1}) {
           var msgPrefix = "Operands for '" + ast.op + "' ";
           // Type-check
@@ -1001,16 +1020,16 @@ function IR(theAST) {
           } else {
             op = 'icmp ' + boolLookup[ast.op];
           }
-          resType={node:'type',name:'INTEGER',origname:'BOOLEAN',lltype:'i1'};
+          resType = normalize_type({node:'type',name:'BOOLEAN'});
         } else if (ast.op === "plus" &&
             (ltype.name === 'STRING' || ltype.origname === 'CHARACTER') &&
             (rtype.name === 'STRING' || rtype.origname === 'CHARACTER')) {
          // string concatenation shorthand
-         resType = annotate_type({node:'type',name:'STRING',
-                                  type:{node:'type',name:'INTEGER',origname:'CHARACTER'}});
+         resType = normalize_type({node:'type',name:'STRING',
+                                  type:{node:'type',name:'CHARACTER'}});
         } else if (ast.op in {plus:1,minus:1,star:1,slash:1,div:1,mod:1}) {
           if (ast.op === 'slash') {
-            resType = {node:'type',name:'REAL',lltype:"float"};
+            resType = normalize_type({node:'type',name:'REAL'});
           } else if ((ltype.name === 'INTEGER' && rtype.name === 'INTEGER') ||
                      (ltype.name === 'REAL' && rtype.name === 'REAL')) {
             resType = ltype;
@@ -1219,7 +1238,7 @@ function IR(theAST) {
           throw new Error("Variable '" + ast.id + "' not found in symbol table or in libraries");
         }
 
-        vdecl.type = annotate_type(vdecl.type);
+        vdecl.type = normalize_type(vdecl.type);
         var id = ast.id,
             vtype = vdecl.type,
             vlevel = vdecl.level,

@@ -10,6 +10,7 @@ TESTS ?= semi1 \
 	 float1 float2 \
 	 bool1 bool2 \
 	 char1 char2 char3 \
+	 byte1 byte2 byte3 byte4 \
 	 const1 const2 \
 	 type1 type2 type3 \
 	 enums1 enums2 enums3 enums4 \

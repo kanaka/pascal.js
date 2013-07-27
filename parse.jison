@@ -192,7 +192,7 @@ type            : INTEGER                               {{ $$ = {node:'type',nam
                 | REAL                                  {{ $$ = {node:'type',name:'REAL'}; }}
                 | BOOLEAN                               {{ $$ = {node:'type',name:'BOOLEAN'}; }}
                 | CHAR                                  {{ $$ = {node:'type',name:'CHARACTER'}; }}
-//                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
+                | BYTE                                  {{ $$ = {node:'type',name:'BYTE'}; }}
                 | ordinal_type                          {{ $$ = $1; }}
                 | structured_type                       {{ $$ = $1; }}
                 /* pointer type */
