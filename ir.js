@@ -77,12 +77,14 @@ function SymbolTable() {
     return name + "_" + (name_cnt++) + "_";
   }
 
-  function display() {
+  function display(all) {
     console.warn("-------------");
     for(var idx = 0; idx < data.length; idx++) {
       console.warn("--- " + idx + " ---");
       for(var name in data[idx]) {
-        console.warn(name + ": ", data[idx][name]);
+        if (all || !data[idx][name].evalfn) {
+          console.warn(name + ": ", data[idx][name]);
+        }
       }
     }
     console.warn("-------------");
@@ -129,25 +131,19 @@ function IR(theAST) {
     return lib;
   }
 
+  function copy_type(obj) {
+    var copy = {};
+    for (var attr in obj) {
+      if (obj.hasOwnProperty(attr)) copy[attr] = obj[attr];
+    }
+    return copy;
+  }
+
   function expand_type(type) {
-    var t = type;
-    while (t.name === 'NAMED' ||
-        (t.name === 'ENUMERATION' && t.id)) {
+    var t = copy_type(type);
+    while (t.name === 'NAMED') {
       var tdecl = st.lookup(t.id);
       t = tdecl.type;
-    }
-    // TODO: simplify/clean this up
-    if (t.name === 'SUBRANGE') {
-      var node = t.start.node;
-      if (node === 'integer') {
-        t.name = 'INTEGER';
-      } else if (node === 'character') {
-        t.name = 'CHARACTER';
-      } else {
-        var tdecl = st.lookup(t.start.id);
-        t = tdecl.type;
-        t.itype = type;
-      }
     }
     return t;
   }
@@ -156,25 +152,26 @@ function IR(theAST) {
   // string. If the type is a named type then it will be resolved to
   // a base type first.
   function annotate_type(type) {
-    var t = expand_type(type),
+    var t = expand_type(type), // implicit copy
         lltype, vdef = "0",
-        keys = ['type', 'lltype', 'default_value', 'index'];
-    switch (t.name) {
-      case 'INTEGER':   lltype = "i32";   vdef = "0"; break;
+        name = (typeof t.origname !== 'undefined') ? t.origname : t.name;
+    switch (name) {
       case 'REAL':      lltype = "float"; vdef = "0.0"; break;
-      case 'BOOLEAN':   lltype = "i1";    vdef = "0"; break;
-      case 'CHARACTER': lltype = "i8";    vdef = "0"; break;
+
+      // structured datatypes
       case 'STRING':
-        annotate_type(t.type);
+        t.type = annotate_type(t.type);
         lltype = "i8*";
         vdef = "null";
         break;
       case 'ARRAY':
-        var index = t.index,
-            start = index.start.val,
-            end = index.end.val,
-            vdefs = [],
-            ttype = annotate_type(t.type);
+        var start, end, vdefs, ttype;
+        t.index = annotate_type(t.index);
+        t.type = annotate_type(t.type);
+        start = t.index.start;
+        end = t.index.end;
+        vdefs = [];
+        ttype = t.type;
         lltype = '[' + (end-start+1) + ' x ' + ttype.lltype + ']';
         for (var i=0; i < end-start+1; i++) {
           vdefs.push(ttype.lltype + ' ' + ttype.default_value);
@@ -186,34 +183,124 @@ function IR(theAST) {
             sections = t.sections;
         t.component_map = {};
         for (var i=0; i<sections.length; i++) {
-          var comp = sections[i],
-              ttype = annotate_type(comp.type);
-          comps.push(ttype.lltype);
-          vdefs.push(ttype.lltype + ' ' + ttype.default_value);
+          var comp = sections[i];
+          comp.type = annotate_type(comp.type);
+          comps.push(comp.type.lltype);
+          vdefs.push(comp.type.lltype + ' ' + comp.type.default_value);
           t.component_map[comp.id] = i;
         }
         lltype = "{" + comps.join(", ") + "}";
         vdef = '{' + vdefs.join(', ') + '}';
-        keys.push('sections', 'component_map');
         break;
-      case 'ENUMERATION':
+
+      // INTEGER types
+      case 'INTEGER':
+        if (typeof t.origname === 'undefined') {
+          t.origname = 'INTEGER';
+        }
         lltype = "i32";
         vdef = 0;
-        keys.push('ids', 'enum_type', 'enum_var');
+        break;
+      case 'CHARACTER':
+        t.name = 'INTEGER';
+        t.origname = 'CHARACTER';
+        lltype = "i8";
+        vdef = 0;
+        break;
+      case 'SUBRANGE':
+        if (typeof t.origname !== 'undefined') {
+          break;
+        }
+        t.name = 'INTEGER';
+        vdef = 0;
+
+        var start = t.start,
+            end = t.end,
+            stype1, stype2;
+        if (start.stype === 'variable') {
+          var decl1 = st.lookup(t.start.val),
+              type1 = annotate_type(decl1.type);
+          stype1 = type1.name;
+          start = type1.default_value;
+
+          if (type1.origname === 'ENUMERATION') {
+            t.origname = type1.origname;
+            t.ids = type1.ids;
+          } else if (typeof type1.origname !== 'undefined') {
+            t.origname = type1.origname;
+          } else {
+            t.origname = stype1;
+          }
+          t.lltype = type1.lltype;
+        } else {
+          stype1 = start.stype;
+          start = start.val;
+          t.origname = stype1;
+
+          switch (stype1) {
+            case 'BOOLEAN':   t.lltype = 'i1'; break;
+            case 'CHARACTER': t.lltype = 'i8'; break;
+            case 'INTEGER':   t.lltype = 'i32'; break;
+            default: throw new Error("Unknown SUBRANGE type: " + stype1);
+          }
+        }
+
+        if (end.stype === 'variable') {
+          var decl2 = st.lookup(t.end.val),
+              type2 = annotate_type(decl2.type);
+          stype2 = type2.name;
+          end = type2.default_value;
+        } else {
+          stype2 = end.stype;
+          end = end.val;
+        }
+        if (stype1 !== stype2) {
+          throw new Error("Subrange of different types: " + stype1 + ' & ' + stype2);
+        }
+        if (typeof start !== 'number' || typeof end !== 'number') {
+          throw new Error("TODO: support more complex constants in subrange definitions");
+        }
+        t.start = start;
+        t.end = end;
+        break;
+      case 'BOOLEAN':
+        t.origname = 'BOOLEAN';
+        t.ids = ['FALSE', 'TRUE'];
+        lltype = 'i1';
+        // fall through since BOOLEAN is an enumeration type
+      case 'ENUMERATION':
+        t.name = 'INTEGER';
+        vdef = 0;
+
+        // Enums/bools are really just INTEGER with additional metadata
+        if (typeof t.enum_type === 'undefined') {
+          var tdecl = st.lookup(t.ids[0]);
+          t.enum_type = tdecl.type.enum_type;
+          t.enum_var = tdecl.type.enum_var;
+          if (typeof t.origname === 'undefined') {
+            t.origname = tdecl.type.origname;
+          }
+        } else if (typeof t.origname === 'undefined') {
+          t.origname = t.name;
+        }
+
+        var ecnt = t.ids.length;
+        if (typeof lltype === 'undefined') {
+          lltype = "i8";
+        }
+        t.start = 0;
+        t.end = ecnt - 1;
         break;
       default: throw new Error("TODO: handle " + t.name + " type");
     }
-    t.lltype = lltype;
-    t.default_value = vdef;
-    // Copy up the type data
-    type.name = t.name;
-    for (var i=0; i < keys.length; i++) {
-      var k = keys[i];
-      if (typeof t[k] !== 'undefined' && typeof type[k] === 'undefined') {
-          type[k] = t[k];
-      }
+    if (typeof t.lltype === 'undefined') {
+      // don't stomp alternate INTEGER lltypes
+      t.lltype = lltype;
     }
-    return type;
+    if (typeof t.default_value === 'undefined') {
+      t.default_value = vdef;
+    }
+    return t;
   }
 
   function isScalar(type) {
@@ -222,7 +309,6 @@ function IR(theAST) {
     switch (t.name) {
       case 'INTEGER':   res = true; break;
       case 'REAL':      res = true; break;
-      case 'BOOLEAN':   res = true; break;
       case 'CHARACTER': res = true; break;
     }
     return res;
@@ -257,8 +343,9 @@ function IR(theAST) {
   function allocate_variable(ir,node,id,fname,type,defval) {
     var pdecl = st.lookup(fname),
         level = pdecl.level,
-        vtype = annotate_type(type),
+        vtype = copy_type(type),
         vdef = typeof defval !== 'undefined' ? defval : vtype.default_value;
+    vtype.default_value = vdef;
 
     if (level === 0) {
       // global scope
@@ -273,6 +360,33 @@ function IR(theAST) {
 
     st.insert(id,{node:node,type:vtype,sname:sname,level:pdecl.level});
     return sname;
+  }
+
+  function allocate_enums(ir,ids,fname,type,lltype) {
+    var ecnt = ids.length,
+        vlist = [];
+    type.enum_type = '[' + ecnt + ' x i8*]';
+    type.enum_var = '@' + st.new_name(type.name);
+    type.origname = type.name;
+    type.name = 'INTEGER';
+    type.lltype = lltype;
+
+    // Declare each ID
+    for (var i=0; i < ecnt; i++) {
+      var eid = ids[i],
+          elen = eid.length + 1,
+          eidstr = st.new_name(type.enum_var + '.' + eid),
+          eitype = '[' + elen + ' x i8]',
+          estr = 'c"' + eid + '\\00"';
+      vlist.push('i8* getelementptr inbounds (' + eitype + '* ' + eidstr + ', i32 0, i32 0)');
+      ir.push([eidstr + ' = private unnamed_addr constant ' + eitype + ' ' + estr]);
+      // Each enumeration element is a var declaration
+      allocate_variable(ir,'var_decl',eid.toUpperCase(),fname,type,i);
+    }
+    // Declare the array of strings for the enum values so that
+    // we can print them out if needed
+    ir.push([type.enum_var + ' = global ' + type.enum_type + ' [ ' + vlist.join(", ") + ' ]']);
+    return type;
   }
 
   // normalizeIR takes a JSON IR
@@ -315,9 +429,12 @@ function IR(theAST) {
             fparams = ast.fparams,
             block = ast.block;
 
-        block.param_list = [];
         st.insert(id,{name:id,level:level,fparams:fparams,lparams:[]});
 
+        // Define some predefined variables/constants
+        allocate_enums(ir,['FALSE','TRUE'],id,{node:'type',name:'BOOLEAN'},'i1');
+
+        block.param_list = [];
         try {
           ir.push.apply(ir, toIR(block,level,fnames.concat([id])));
         } catch(e) {
@@ -376,8 +493,9 @@ function IR(theAST) {
 
         // Regular formal parameters
         for (var i=0; i < fparams.length; i++) {
-          var fparam = fparams[i],
-              ftype = annotate_type(fparam.type),
+          var fparam = fparams[i];
+          fparam.type = annotate_type(fparam.type);
+          var ftype = fparam.type,
               lltype = ftype.lltype,
               pname = "%" + st.new_name(fparam.id + "_fparam"),
               sname = "%" + st.new_name(fparam.id + "_fparam_stack");
@@ -424,10 +542,9 @@ function IR(theAST) {
         for (var i=0; i < lparams.length; i++) {
           var lparam = lparams[i],
               ldecl = st.lookup(lparam.id),
-              sname = ldecl.sname,
-              ltype = annotate_type(ldecl.type),
-              lltype = ltype.lltype;
-            lparam_list.push(lltype + '* ' + sname);
+              sname = ldecl.sname;
+          ldecl.type = annotate_type(ldecl.type);
+          lparam_list.push(ldecl.type.lltype + '* ' + sname);
         }
         param_list = lparam_list.concat(param_list);
 
@@ -458,39 +575,22 @@ function IR(theAST) {
         break;
 
       case 'type_decl':
-        var id = ast.id,
-            type = ast.type;
-        if (type.name === 'NAMED') {
-          st.lookup(type.id); // verify the reference type exists
+        var id = ast.id;
+        ast.type = expand_type(ast.type);
+        if (ast.type.name === 'ENUMERATION') {
+          ast.type = allocate_enums(ir,ast.type.ids,fname,ast.type,'i8');
         }
-        if (type.name === 'ENUMERATION') {
-          var ecnt = type.ids.length,
-              enum_type = '[' + ecnt + ' x i8*]',
-              enum_name = st.new_name(id),
-              enum_var = '@enum.' + enum_name,
-              vlist = [];
-          type.enum_type = enum_type;
-          type.enum_var = enum_var;
-          for (var i=0; i < ecnt; i++) {
-            var eid = type.ids[i],
-                eidstr = '@str.' + enum_name + '.' + eid,
-                elen = eid.length + 1,
-                eitype = '[' + elen + ' x i8]',
-                estr = 'c"' + eid + '\\00"';
-            vlist.push('i8* getelementptr inbounds (' + eitype + '* ' + eidstr + ', i32 0, i32 0)');
-            ir.push([eidstr + ' = private unnamed_addr constant ' + eitype + ' ' + estr]);
-            // Each enumeration element is a var declaration
-            allocate_variable(ir,'var_decl',eid.toUpperCase(),fname,type,i);
-          }
-          // Declare the array of strings for the enum values so that
-          // we can print them out if needed
-          ir.push([enum_var + ' = global ' + enum_type + ' [ ' + vlist.join(", ") + ' ]']);
-        }
-        st.insert(id,{node:'type_decl',id:id,type:type});
+        ast.type = annotate_type(ast.type);
+        st.insert(id,{node:'type_decl',id:id,type:ast.type});
         break;
 
       case 'var_decl':
-        var sname = allocate_variable(ir,'var_decl',ast.id,fname,ast.type);
+        ast.type = expand_type(ast.type);
+        if (ast.type.name === 'ENUMERATION') {
+          allocate_enums(ir,ast.type.ids,fname,ast.type,'i8');
+        }
+        ast.type = annotate_type(ast.type);
+        allocate_variable(ir,'var_decl',ast.id,fname,ast.type);
         break;
 
       case 'const_decl':
@@ -498,8 +598,9 @@ function IR(theAST) {
             expr = ast.expr;
 
         ir.push.apply(ir, toIR(expr,level,fnames));
+        expr.type = annotate_type(expr.type);
 
-        var sname = allocate_variable(ir,'const_decl',id,fname,expr.type);
+        var sname = allocate_variable(ir,'const_decl',id,fname,expr.type,expr.val);
 
         ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + expr.itype + '* ' + sname);
         break;
@@ -530,9 +631,9 @@ function IR(theAST) {
           // return value for the function so we don't evaluate the
           // lvalue
           var pdecl = st.lookup(fname);
-          ptype = annotate_type(pdecl.type);
+          pdecl.type = annotate_type(pdecl.type);
           lvalue.type = pdecl.type;
-          lvalue.itype = ptype.lltype;
+          lvalue.itype = pdecl.type.lltype;
           pdecl.ireturn = true;
           pdecl.itype = lvalue.itype;
           st.replace(fname,pdecl);
@@ -568,6 +669,8 @@ function IR(theAST) {
           ir.push('  store float ' + conv + ', ' + litype + '* ' + listack);
         } else if (lvalue.type.name !== expr.type.name) {
           throw new Error("Type of lvalue and expression do not match: " + lvalue.type.name + " vs " + expr.type.name);
+        } else if (lvalue.type.origname !== expr.type.origname) {
+          throw new Error("Subtype of lvalue and expression do not match: " + lvalue.type.origname + " vs " + expr.type.origname);
         } else {
           ir.push('  store ' + expr.itype + ' ' + expr.ilocal + ', ' + litype + '* ' + listack);
         }
@@ -623,18 +726,21 @@ function IR(theAST) {
                             " given")
           }
           var cname = cparam.id ? cparam.id : "'" + cparam.val + "'",
-              ctype = cparam.type.name;
+              ctype = cparam.type,
+              ctname = ctype.name,
+              ctoname = ctype.origname;
           if (ftype === 'multiple') {
             var ftypes = fparam.type.names;
-            if (ftypes.indexOf(ctype) < 0) {
+            if (ftypes.indexOf(ctname) < 0 &&
+                ftypes.indexOf(ctoname) < 0) {
               throw new Error("Parameter mismatch calling " +
-                              id + ": " + cname + ":" + ctype +
+                              id + ": " + cname + ":" + ctname +
                               " given, but definition is " + ftypes);
             }
           } else {
-            if (ctype !== ftype) {
+            if (ctname !== ftype) {
               throw new Error("Parameter mismatch calling " +
-                              id + ": " + cname + ":" + ctype +
+                              id + ": " + cname + ":" + ctname +
                               " given, but definition is " + ftype);
             }
           }
@@ -649,8 +755,8 @@ function IR(theAST) {
             var lparam = lparams[i],
                 lltype = null;
             ir.push.apply(ir, toIR(lparam,level,fnames));
-            ltype = annotate_type(lparam.type),
-            param_list.push(ltype.lltype + "* " + lparam.istack);
+            lparam.type = annotate_type(lparam.type),
+            param_list.push(lparam.type.lltype + "* " + lparam.istack);
           }
           for(var i=0; i < cparams.length; i++) {
             var cparam = cparams[i],
@@ -668,9 +774,9 @@ function IR(theAST) {
             }
           }
           if (node === 'expr_call') {
-            var ret = '%' + st.new_name(pdecl.name + "_ret"),
-              ptype = annotate_type(pdecl.type),
-              lltype = ptype.lltype;
+            var ret = '%' + st.new_name(pdecl.name + "_ret");
+            pdecl.type = annotate_type(pdecl.type);
+            var lltype = pdecl.type.lltype;
             ir.push('  ' + ret + ' = call ' + lltype + ' @' + pdecl.name + "(" + param_list.join(", ") + ")");
             ast.type = pdecl.type;
             ast.itype = lltype;
@@ -864,8 +970,8 @@ function IR(theAST) {
           
         ir.push.apply(ir, toIR(left,level,fnames));
         ir.push.apply(ir, toIR(right,level,fnames));
-        ltype = annotate_type(left.type);
-        rtype = annotate_type(right.type);
+        ltype = left.type = annotate_type(left.type);
+        rtype = left.type = annotate_type(right.type);
         if (ast.op in {gt:1,lt:1,geq:1,leq:1,eq:1,neq:1}) {
           var msgPrefix = "Operands for '" + ast.op + "' ";
           // Type-check
@@ -895,13 +1001,13 @@ function IR(theAST) {
           } else {
             op = 'icmp ' + boolLookup[ast.op];
           }
-          resType={node:'type',name:'BOOLEAN',lltype:'i1'};
+          resType={node:'type',name:'INTEGER',origname:'BOOLEAN',lltype:'i1'};
         } else if (ast.op === "plus" &&
-            (ltype.name === 'STRING' || ltype.name === 'CHARACTER') &&
-            (rtype.name === 'STRING' || rtype.name === 'CHARACTER')) {
+            (ltype.name === 'STRING' || ltype.origname === 'CHARACTER') &&
+            (rtype.name === 'STRING' || rtype.origname === 'CHARACTER')) {
          // string concatenation shorthand
          resType = annotate_type({node:'type',name:'STRING',
-                                  type:{node:'type',name:'CHARACTER'}});
+                                  type:{node:'type',name:'INTEGER',origname:'CHARACTER'}});
         } else if (ast.op in {plus:1,minus:1,star:1,slash:1,div:1,mod:1}) {
           if (ast.op === 'slash') {
             resType = {node:'type',name:'REAL',lltype:"float"};
@@ -989,7 +1095,7 @@ function IR(theAST) {
             aoff = aname + 'off',
             aval = aname + 'val';
         // TODO: bounds checking
-        start = atype.index.start.val;
+        start = atype.index.start;
         rtype = atype.type;
         ritype = atype.type.lltype;
         if (atype.name === 'STRING') {
@@ -1026,15 +1132,18 @@ function IR(theAST) {
         ast.ilocal = rval;
         break;
 
-      case 'integer':
-        ast.itype = "i32";
-        ast.ilocal = ast.val;
-        break;
       case 'real':
         ast.itype = "float";
         ast.ilocal = ieee754.llvm_float_hex(ast.val);
         break;
+      case 'integer':
+        ast.type.origname = 'INTEGER';
+        ast.itype = "i32";
+        ast.ilocal = ast.val;
+        break;
       case 'character':
+        ast.type.name = 'INTEGER';
+        ast.type.origname = 'CHARACTER';
         ast.itype = "i8";
         ast.ilocal = ast.val;
         break;
@@ -1080,7 +1189,7 @@ function IR(theAST) {
               default: throw new Error("Unknown control character " + ast.id);
             }
             ast.node = 'character';
-            ast.type = {node:'type',name:'CHARACTER'};
+            ast.type = {node:'type',name:'INTEGER',origname:'CHARACTER'};
             ast.itype = "i8";
             ast.ilocal = ast.val;
             delete ast.id;
@@ -1110,8 +1219,9 @@ function IR(theAST) {
           throw new Error("Variable '" + ast.id + "' not found in symbol table or in libraries");
         }
 
+        vdecl.type = annotate_type(vdecl.type);
         var id = ast.id,
-            vtype = annotate_type(vdecl.type),
+            vtype = vdecl.type,
             vlevel = vdecl.level,
             lname = "%" + st.new_name(id + "_local");
 

@@ -18,8 +18,6 @@ function SYSTEM (st) {
     ir.push(['']);
     //ir.push(['@.newline = private constant [3 x i8] c"\\0D\\0A\\00"']);
     ir.push(['@.newline = private constant [2 x i8] c"\\0A\\00"']);
-    ir.push(['@.true_str = private constant [5 x i8] c"TRUE\\00"']);
-    ir.push(['@.false_str = private constant [6 x i8] c"FALSE\\00"']);
     ir.push(['@.str_format = private constant [3 x i8] c"%s\\00"']);
     ir.push(['@.chr_format = private constant [3 x i8] c"%c\\00"']);
     ir.push(['@.int_format = private constant [3 x i8] c"%d\\00"']);
@@ -50,8 +48,16 @@ function SYSTEM (st) {
           format = null,
           flen = 3;
       switch (param.type.name) {
-        case 'INTEGER':   format = "@.int_format"; break;
-        case 'CHARACTER': format = "@.chr_format"; break;
+        case 'INTEGER':
+            if (param.type.origname === 'CHARACTER') {
+                format = "@.chr_format";
+            } else {
+                format = "@.int_format";
+            }
+            break;
+        case 'CHARACTER':
+            format = "@.chr_format";
+            break;
         default:
           throw new Error("Unknown READ type: " + param.type.name);
       }
@@ -89,7 +95,29 @@ function SYSTEM (st) {
           format = null,
           flen = 3;
       switch (param.type.name) {
-        case 'INTEGER':   format = "@.int_format"; break;
+        case 'INTEGER':
+            switch (param.type.origname) {
+              case 'BOOLEAN':
+              case 'ENUMERATION':
+                var ctype = param.type,
+                    offset = st.new_name('%offset'),
+                    array_idx = st.new_name('%arrayidx'),
+                    str_local = st.new_name('%' + param.id + "_str");
+                format = "@.str_format"; 
+                ir.push('  ' + offset + ' = zext ' + param.itype + ' ' + param.ilocal + ' to i32');
+                ir.push('  ' + array_idx + ' = getelementptr ' + ctype.enum_type + '* ' + ctype.enum_var + ', i32 0, i32 ' + offset);
+                ir.push('  ' + str_local + ' = load i8** ' + array_idx);
+                pitype = 'i8*';
+                pilocal = str_local;
+                break;
+              case 'CHARACTER':
+                format = '@.chr_format';
+                break;
+              default:
+                format = "@.int_format";
+                break;
+            }
+            break;
         case 'STRING':    format = "@.str_format"; break;
         case 'CHARACTER': format = "@.chr_format"; break;
         case 'REAL':
@@ -100,42 +128,6 @@ function SYSTEM (st) {
           flen = 4;
           pitype = "double";
           pilocal = conv;
-          break;
-        case 'BOOLEAN':
-          var br_name = pre + 'br',
-              br_true = br_name + '_true',
-              br_false = br_name + '_false',
-              br_done = br_name + '_done',
-              bool_local1 = '%' + pre + 'bool_local_1',
-              bool_local2 = '%' + pre + 'bool_local_2',
-              bool_local_out = '%' + pre + 'bool_local_out';
-          ir.push('  br ' + param.itype + ' ' + param.ilocal +
-                  ', label %' + br_true + ', label %' + br_false);
-          ir.push(br_true + ':');
-          ir.push('    ' + bool_local1 +
-                  ' = getelementptr [5 x i8]* @.true_str, i32 0, i32 0');
-          ir.push('  br label %' + br_done);
-          ir.push(br_false + ':');
-          ir.push('    ' + bool_local2 +
-                  ' = getelementptr [6 x i8]* @.false_str, i32 0, i32 0');
-          ir.push('  br label %' + br_done);
-          ir.push(br_done + ':');
-          ir.push('  ' + bool_local_out + ' = phi i8* [ ' + bool_local1 +
-                  ', %' + br_true + '], [ ' + bool_local2 +
-                  ', %' + br_false + ']');
-          format = "@.str_format";
-          pitype = 'i8*';
-          pilocal = bool_local_out;
-          break;
-        case 'ENUMERATION':
-          var ctype = param.type,
-              array_idx = st.new_name('%arrayidx'),
-              str_local = st.new_name('%' + param.id + "_str");
-          format = "@.str_format"; 
-          ir.push('  ' + array_idx + ' = getelementptr ' + ctype.enum_type + '* ' + ctype.enum_var + ', i32 0, i32 ' + param.ilocal);
-          ir.push('  ' + str_local + ' = load i8** ' + array_idx);
-          pitype = 'i8*';
-          pilocal = str_local;
           break;
         default:
           throw new Error("Unknown WRITE type: " + param.type.name);
@@ -186,7 +178,7 @@ function SYSTEM (st) {
     ir.push('  ; ' + id + ' start');
     ir.push('  ' + lname + ' = trunc ' + cparam.itype + ' ' + cparam.ilocal + ' to i8');
     ir.push('  ; ' + id + ' finish');
-    ast.type = {node:'type',name:'CHARACTER'};
+    ast.type = {node:'type',name:'INTEGER',origname:'CHARACTER'};
     ast.itype = 'i8';
     ast.ilocal = lname;
     return ir;
@@ -210,8 +202,17 @@ function SYSTEM (st) {
     ir.push('  ; ' + id + ' start');
     switch (ctype.name) {
       case 'INTEGER':
-      case 'ENUMERATION':
-        lname = cparam.ilocal;
+        switch (ctype.origname) {
+          case 'CHARACTER': // fall through
+          case 'ENUMERATION':
+            ir.push('  ' + lname + ' = zext i8 ' + cparam.ilocal + ' to i32');
+            break;
+          case 'BOOLEAN':
+            ir.push('  ' + lname + ' = zext i1 ' + cparam.ilocal + ' to i32');
+            break;
+          default:
+            lname = cparam.ilocal;
+        }
         break;
       case 'CHARACTER':
         ir.push('  ' + lname + ' = zext i8 ' + cparam.ilocal + ' to i32');
@@ -223,9 +224,6 @@ function SYSTEM (st) {
         ir.push('  ' + lname1 + ' = getelementptr inbounds ' + cparam.itype + ' ' + cparam.istack + ', i32 0, i32 0');
         ir.push('  ' + lname2 + ' = load i8* ' + lname1);
         ir.push('  ' + lname + ' = sext i8 ' + lname2 + ' to i32');
-        break;
-      case 'BOOLEAN':
-        ir.push('  ' + lname + ' = zext i1 ' + cparam.ilocal + ' to i32');
         break;
       default:
         throw new Error("Invalid type passed to ORD: " + ctype.name);
@@ -244,8 +242,8 @@ function SYSTEM (st) {
     if (clen !== 1) {
       throw new Error("INTEGER only accepts one argument (" + clen + " given)");
     }
-    if (cparam.type.name === 'CHARACTER') {
-        ir.push('  ' + lname + ' = zext i8 ' + cparam.ilocal + ' to i32');
+    if (cparam.itype !== 'i32') {
+        ir.push('  ' + lname + ' = zext ' + cparam.itype + ' ' + cparam.ilocal + ' to i32');
         ast.type = {node:'type',name:'INTEGER'};
         ast.itype = 'i32';
         ast.ilocal = lname;
@@ -273,7 +271,7 @@ function SYSTEM (st) {
     ir.push('  ' + prev_tsize + ' = add i64 0, 0');
     for (var i=0; i < cparams.length; i++) {
         cparam = cparams[i];
-        if (cparam.type.name !== 'STRING' && cparam.type.name !== 'CHARACTER') {
+        if (cparam.type.name !== 'STRING' && cparam.type.origname !== 'CHARACTER') {
             throw new Error("Concat arguments must be STRINGs");
         }
         var decay = st.new_name('%decay'),
@@ -283,7 +281,7 @@ function SYSTEM (st) {
             tsize = st.new_name('%tsize'),
             ret = st.new_name('%ret');
 
-        if (cparam.type.name === 'CHARACTER') {
+        if (cparam.type.origname === 'CHARACTER') {
           ir.push('  ' + tsize + ' = add i64 1, ' + prev_tsize);
           ir.push('  ' + decay + ' = alloca i8');
           ir.push('  store i8 ' + cparam.ilocal + ', i8* ' + decay);
@@ -349,7 +347,7 @@ function SYSTEM (st) {
         cparam = cparams[0];
         ir.push('  ' + call + ' = call i32 @lrand48()');
         ir.push('  ' + conv + ' = urem i32 ' + call + ', ' + cparam.ilocal);
-        ast.type = {node:'type',name:'INTEGER'};
+        ast.type = {node:'type',name:'INTEGER',origname:'INTEGER'};
         ast.itype = 'i32';
         ast.ilocal = conv;
     } else {
@@ -393,7 +391,7 @@ function SYSTEM (st) {
        [{type:{node:'type',name:'any'}}],
        {node:'type',name:'INTEGER'});
   pins('INTEGER', INTEGER,
-       [{type:{node:'type',name:'CHARACTER'}}],
+       [{type:{node:'type',name:'multiple',names:['INTEGER', 'CHARACTER']}}],
        {node:'type',name:'INTEGER'});
   // String routines
   pins('CONCAT', CONCAT,

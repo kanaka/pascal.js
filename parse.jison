@@ -8,7 +8,6 @@
 STRING                  "'"(?:[^']+|"''")(?:[^']+|"''")+"'"
 REAL                    [0-9]+"."[0-9]+
 INTEGER                 [0-9]+
-BOOLEAN                 "TRUE"|"FALSE"
 CHARACTER               "#"[0-9]+|"'"([^']+|"''")"'"
 ID                      [A-Za-z_][A-Za-z0-9_]*
 WHITESPACE              \s+
@@ -27,8 +26,6 @@ WHITESPACE              \s+
 {INTEGER}               return "INTEGER_LITERAL";
 {STRING}                return "STRING_LITERAL";
 {CHARACTER}             return "CHARACTER_LITERAL";
-"TRUE"                  return "TRUE_LITERAL";
-"FALSE"                 return "FALSE_LITERAL";
 
 
 ":="                    return "ASSIGN";  /* Needs to be before COLON and EQ */
@@ -203,10 +200,10 @@ type            : INTEGER                               {{ $$ = {node:'type',nam
                 ;
 structured_type : STRING                                {{ $$ = {node:'type',name:'STRING'};
                                                            $$.type = {node:'type',name:'CHARACTER'};
-                                                           $$.index ={start:{val:1} }; }}
+                                                           $$.index ={start:1}; }}
                 | STRING LBRACK INTEGER_LITERAL RBRACK  {{ $$ = {node:'type',name:'STRING'};
                                                            $$.type = {node:'type',name:'CHARACTER'};
-                                                           $$.index ={start:{val:1},end:{val:parseInt($3)} }; }}
+                                                           $$.index ={start:1,end:parseInt($3) }; }}
                 | ARRAY LBRACK indexes RBRACK OF type   {{ $$ = $6;
                                                            for(var i=$3.length-1; i >= 0; i--) {
                                                              $$ = {node:'type',name:'ARRAY',type:$$,index:$3[i]}; } }}
@@ -224,9 +221,13 @@ enumerated_type : LPAREN literal_ids RPAREN             {{ $$ = {node:'type',nam
 indexes         : indexes COMMA ordinal_type            {{ $$ = $1.concat($3); }}
                 | ordinal_type                          {{ $$ = [$1]; }}
                 ;
-subrange        : constant_num DOTDOT constant_num      {{ $$ = {node:'subrange',start:$1,end:$3}; }}
-                | character DOTDOT character            {{ $$ = {node:'subrange',start:$1,end:$3}; }}
-                | id DOTDOT id                          {{ $$ = {node:'subrange',start:{node:'variable',id:$1},end:{node:'variable',id:$3} }; }}
+subrange        : constant DOTDOT constant              {{ $$ = {node:'subrange',start:$1,end:$3}; }}
+                | id DOTDOT constant                    {{ $$ = {node:'subrange',start:{node:'constant',stype:'variable',val:$1},end:$3}; }}
+                | constant DOTDOT id                    {{ $$ = {node:'subrange',start:$1,end:{node:'constant',stype:'variable',val:$3} }; }}
+                | id DOTDOT id                          {{ $$ = {node:'subrange',start:{node:'constant',stype:'variable',val:$1 },end:{node:'constant',stype:'variable',val:$3} }; }}
+                ;
+constant        : constant_num                          {{ $$ = {node:'constant',stype:'INTEGER',val:$1.val}; }}
+                | character                             {{ $$ = {node:'constant',stype:'CHARACTER',val:$1.val}; }}
                 ;
 rec_sections    : rec_sections SEMI rec_section         {{ $$ = $1.concat($3); }}
                 |                   rec_section         {{ $$ = $1; }}
@@ -321,10 +322,8 @@ expr            : INTEGER_LITERAL                       {{ $$ = {node:'integer',
                                                                re = /''/g,
                                                                val = raw.replace(re, "'");
                                                            $$ = {node:'string',val:val,type:{node:'type',name:'STRING'},
-                                                                 index:{node:'subrange',start:{val:1},end:{val:val.length+1} } }; }}
+                                                                 index:{node:'subrange',start:1,end:val.length+1 } }; }}
                 | character                             {{ $$ = $1; }}
-                | TRUE_LITERAL                          {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:true}; }}
-                | FALSE_LITERAL                         {{ $$ = {node:'boolean',type:{node:'type',name:'BOOLEAN'},val:false}; }}
                 | lvalue                                {{ $$ = $1; }}
                 | CARET id                              {{ $$ = {node:'pointer',type:{node:'type',name:'POINTER'},id:$2}; }}
                 | LPAREN expr RPAREN                    {{ $$ = $2; }}

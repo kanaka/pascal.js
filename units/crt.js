@@ -105,7 +105,7 @@ function CRT (st) {
     ir.push('  ; READKEY start');
     ir.push('  ' + call + ' = call i32 @readkey()');
     ir.push('  ' + res + ' = trunc i32 ' + call + ' to i8');
-    ast.type = {node:'type',name:'CHARACTER'};
+    ast.type = {node:'type',name:'INTEGER',origname:'CHARACTER'};
     ast.itype = "i8";
     ast.ilocal = res;
     ir.push('  ; READKEY finish');

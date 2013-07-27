@@ -1,18 +1,13 @@
 program Sample;
 
-procedure A (test:Boolean);
-begin
-  if test then
-    WriteLn('yep')
-  else
-    WriteLn ('nope')
-end;
-
-function B:Boolean;
-begin
-  B := False
-end;
+var
+    f, t :BOOLEAN;
 
 begin
- A( not(B) )
+  WriteLn('FALSE: ', FALSE);
+  WriteLn('TRUE: ', TRUE);
+  f := FALSE;
+  WriteLn('f: ', f);
+  t := TRUE;
+  WriteLn('t: ', t);
 end.
