@@ -446,7 +446,13 @@ function IR(theAST) {
         st.insert(id,{name:id,level:level,fparams:fparams,lparams:[]});
 
         // Define some predefined variables/constants
-        allocate_enums(ir,['FALSE','TRUE'],id,{node:'type',name:'BOOLEAN'},'i1');
+        allocate_enums(ir,['FALSE','TRUE'],id,
+            {node:'type',name:'BOOLEAN'},'i1');
+        allocate_variable(ir,'const_decl','PI',id,
+            normalize_type({node:'type',name:'REAL'}),
+            ieee754.llvm_float_hex(3.1415926536));
+        allocate_variable(ir,'const_decl','MAXINT',id,
+            normalize_type({node:'type',name:'INTEGER'}),32767);
 
         block.param_list = [];
         try {

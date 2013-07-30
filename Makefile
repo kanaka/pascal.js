@@ -11,7 +11,7 @@ TESTS ?= semi1 \
 	 bool1 bool2 \
 	 char1 char2 char3 char4 \
 	 byte1 byte2 byte3 byte4 \
-	 const1 const2 \
+	 const1 const2 const3 \
 	 type1 type2 type3 \
 	 enums1 enums2 enums3 enums4 enums5 \
 	 ord1 ord2 \
