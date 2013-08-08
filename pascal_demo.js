@@ -2,7 +2,6 @@ function loadSourceFile(path) {
   var req = new XMLHttpRequest();
   req.onload = function() {
       var src = document.getElementById('the_source');
-      console.warn(req.responseText);
       src.innerHTML = req.responseText;
   }
   req.open("get", path);
