@@ -1,4 +1,4 @@
-program Sample;
+program NestedScope;
   var A : Integer;
 
   procedure L1(var C : Integer);

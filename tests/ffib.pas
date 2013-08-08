@@ -1,4 +1,4 @@
-program fibo;     
+program Fibonacci;     
 var
  i, result : integer;
 

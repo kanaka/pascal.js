@@ -1,4 +1,4 @@
-Program Catch22;
+Program Catch222;
 {From Turbo Pascal Reference (Feb84) pg. 138}
 
 Var

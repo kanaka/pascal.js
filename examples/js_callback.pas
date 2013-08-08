@@ -1,4 +1,4 @@
-program BrowserTest;
+program JSCallback;
 
 uses js;
 

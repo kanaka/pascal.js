@@ -1,4 +1,4 @@
-program BrowserTest;
+program JSAlert;
 
 uses js;
 

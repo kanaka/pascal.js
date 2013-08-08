@@ -1,4 +1,4 @@
-program Sample;
+program QuickSort;
 
 type
   NumberArray = Array [0..9] of Integer;
