@@ -149,7 +149,9 @@ function SYSTEM (st) {
         str = '%' + pre + 'str',
         call = '%' + pre + 'call';
     ir.push('  ; WRITELN start');
-    ir.push.apply(ir, WRITE(ast, cparams));
+    if (cparams.length > 0) {
+        ir.push.apply(ir, WRITE(ast, cparams));
+    }
     ir.push.apply(ir, WRITE(ast, [{type:{name: 'STRING'},itype:'[2 x i8]*',ilocal:'@.newline'}]));
     ir.push('  ; WRITELN finish');
     return ir;
@@ -162,6 +164,21 @@ function SYSTEM (st) {
   //
   // Scalar functions
   //
+  function ODD(ast, cparams) {
+    var ir = [],
+        id = ast.id,
+        cparam = cparams[0],
+        rem = st.new_name('%rem'),
+        lname = st.new_name('%odd');
+    ir.push('  ; ' + id + ' start');
+    ir.push('  ' + rem + ' = urem ' + cparam.itype + ' ' + cparam.ilocal + ', 2');
+    ir.push('  ' + lname + ' = icmp eq ' + cparam.itype + ' ' + rem + ', 1');
+    ir.push('  ; ' + id + ' finish');
+    ast.type = {node:'type',name:'INTEGER',origname:'BOOLEAN'};
+    ast.itype = 'i1';
+    ast.ilocal = lname;
+    return ir;
+  }
 
   //
   // Transfer functions
@@ -380,6 +397,10 @@ function SYSTEM (st) {
        [{type:{node:'type',name:'varargs'}}]);
   pins('WRITELN', WRITELN,
        [{type:{node:'type',name:'varargs'}}]);
+  // Scalar functions
+  pins('ODD', ODD,
+       [{type:{node:'type',name:'INTEGER'}}],
+       {node:'type',name:'BOOLEAN'});
   // Transfer functions
   pins('CHAR', CHAR,
        [{type:{node:'type',name:'INTEGER'}}],

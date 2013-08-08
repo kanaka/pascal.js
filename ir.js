@@ -160,6 +160,9 @@ function IR(theAST) {
 
       // structured datatypes
       case 'STRING':
+        if (typeof t.type === 'undefined') {
+          t.type = {node:'type',name:'CHARACTER'};
+        }
         t.type = normalize_type(t.type);
         lltype = "i8*";
         vdef = "null";
@@ -776,6 +779,9 @@ function IR(theAST) {
           // This is a call to built-in unit routine and needs to be
           // evaluated (in a sense: macro expanded)
           ir.push.apply(ir, pdecl.evalfn(ast, cparams));
+          if (ast.node === 'expr_call') {
+            ast.type = normalize_type(ast.type);
+          }
         } else {
           var param_list = [];
           for(var i=0; i < lparams.length; i++) {
@@ -1079,8 +1085,7 @@ function IR(theAST) {
             (ltype.name === 'STRING' || ltype.origname === 'CHARACTER') &&
             (rtype.name === 'STRING' || rtype.origname === 'CHARACTER')) {
          // string concatenation shorthand
-         resType = normalize_type({node:'type',name:'STRING',
-                                  type:{node:'type',name:'CHARACTER'}});
+         resType = normalize_type({node:'type',name:'STRING'});
         } else if (ast.op in {plus:1,minus:1,star:1,slash:1,div:1,mod:1}) {
           if (ast.op === 'slash') {
             resType = normalize_type({node:'type',name:'REAL'});

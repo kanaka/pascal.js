@@ -15,6 +15,7 @@ TESTS ?= semi1 \
 	 type1 type2 type3 \
 	 enums1 enums2 enums3 enums4 enums5 \
 	 ord1 ord2 \
+	 odd1 \
 	 subrange1 subrange2 subrange3 subrange4 subrange5 subrange6 \
 	 proc1 proc2 proc3 proc4 proc5 \
 	 func1 \
