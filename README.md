@@ -25,7 +25,7 @@ your browser. Try out the obligatory
 Take your pick:
 
 * It has been said: "Great programmers don't program in Pascal but they
-have built a compiler for it." Turbo Pascal was the first programming
+have built a compiler for it." Turbo Pascal was my first programming
 language and now I have built a compiler for it. I'm not sure where
 that leaves me ...
 
