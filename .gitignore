@@ -2,3 +2,4 @@ build/
 parse.js
 units/kbd.ll
 units/kbd.js
+/node_modules/

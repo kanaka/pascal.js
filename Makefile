@@ -2,6 +2,7 @@ TESTDIR ?= tests
 BUILDDIR ?= build
 RUNLL ?= ./runll
 RUNFPC ?= ./runfpc
+JISON ?= ./node_modules/.bin/jison
 
 TESTS ?= semi1 \
 	 write1 write2 write3 \
@@ -44,8 +45,11 @@ clean:
 	rm -f $(BUILDDIR)/* parse.js
 	rm -f units/kbd.ll units/kbd.js
 
-parse.js: parse.jison
-	jison parse.jison
+$(JISON):
+	npm install
+
+parse.js: parse.jison $(JISON)
+	$(JISON) parse.jison
 
 # Remove declarations that will also be declared in units
 units/kbd.js: units/kbd.ll
