@@ -4,4 +4,6 @@ node_js:
   - 0.8
 
 # triggering build
-script: make
+script: 
+  - make
+  - ./test.sh
