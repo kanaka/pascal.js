@@ -47,6 +47,52 @@ work). I took both paths (of course!). This is the result of that
 second path.
 
 
+## Usage
+
+Make sure that you have the `llvm.js` submodule checked out:
+
+```
+git submodule init
+git submodule update
+```
+
+Download the node jison module and use it to build the lexer/parser
+module:
+
+```
+make parser.js
+```
+
+Compile to JavaScript using `compile.js` and run the resulting
+executable directly with node:
+
+```
+compile.js tests/ffib.pas build/ffib.js
+node build/ffib.js
+```
+
+To build native executables, pascal.js uses the `llc` executable that
+is part of clang/LLVM. You can install clang on Debian/Ubuntu like this:
+
+```
+sudo apt-get install clang
+```
+
+Compile to a native executable using `compile_native.js` and run the
+resulting executable:
+
+```
+compile_native.js tests/ffib.pas build/ffib
+build/ffib
+```
+
+Generate LLVM IR (skipping assembly) using `ir.js` like this:
+
+```
+node ir.js tests/ffib.pas > build/ffib.ll
+```
+
+
 ## Language Features Supported
 
 The following features of Turbo Pascal 1.0 are supported:

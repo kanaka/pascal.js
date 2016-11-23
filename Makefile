@@ -77,6 +77,8 @@ LL_OBJECTS=$(GOOD_TESTS:%=$(BUILDDIR)/%.2)
 FPC_OUTPUT=$(GOOD_TESTS:%=$(BUILDDIR)/%.out1)
 LL_OUTPUT=$(GOOD_TESTS:%=$(BUILDDIR)/%.out2)
 
+JS_OBJECTS=$(GOOD_TESTS:%=$(BUILDDIR)/%.js)
+
 DIFFS=$(GOOD_TESTS:%=$(BUILDDIR)/%.diff)
 FAIL_MARKS=$(FAIL_TESTS:%=$(BUILDDIR)/%.fail-msg)
 
@@ -92,6 +94,9 @@ $(FPC_OBJECTS): $(BUILDDIR)/%.1: $(TESTDIR)/%.pas $(TEST_DEPS)
 
 $(LL_OBJECTS): $(BUILDDIR)/%.2: $(TESTDIR)/%.pas $(TEST_DEPS)
 	node compile_native.js $< $@
+
+$(JS_OBJECTS): $(BUILDDIR)/%.js: $(TESTDIR)/%.pas $(TEST_DEPS)
+	node compile.js $< $@
 
 $(FAIL_MARKS): $(BUILDDIR)/%.fail-msg: $(TESTDIR)/%.pas $(TEST_DEPS)
 	@echo "Verifying that $< fails"; \

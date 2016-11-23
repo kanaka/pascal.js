@@ -1,4 +1,5 @@
-var fs = require('fs'),
+var LLC = "llc",
+    fs = require('fs'),
     path = require('path'),
     exec = require('child_process').exec;
 
@@ -11,7 +12,7 @@ function Compiler() {
         ast = Parse.parser.parse(source),
         ir = IR.toIR(ast),
         child;
-    child = exec('llc -', function(error, stdout, stderr) {
+    child = exec(LLC + ' -', function(error, stdout, stderr) {
       if (error !== null) {
         throw new Error("Errors during compilation:\n" + stderr);
       } 
