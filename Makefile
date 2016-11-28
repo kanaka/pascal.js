@@ -36,6 +36,11 @@ TESTS ?= semi1 \
 	 fail_param1 fail_param2 fail_param3 fail_param4 \
 	 fail_func1 fail_func2
 
+# In addition, these should pass when using native backend
+TESTS_NATIVE ?= \
+	record1 record2 record3 record4 \
+	deref3 \
+	area
 
 all: parse.js units/kbd.js
 
