@@ -22,22 +22,25 @@ TESTS ?= semi1 \
 	 func1 \
 	 string1 string2 string3 string4 string5 string6 string7 string8 string9 string10 string11 string12 \
 	 array1 array2 array3 array4 array5 array6 array7 array8 array9 array10 array11 \
-	 record1 record2 record3 record4 \
-	 deref1 deref2 deref3 \
+	 deref1 deref2 \
 	 if1 if2 \
 	 case1 \
 	 nested1 nested2 nested3 nested4 nested5 \
 	 for1 for2 repeat1 while1 while2 \
 	 halt \
-	 delay clrscr1 gotoxy1 keypressed1 keypressed2 box \
 	 random1 random2 \
 	 \
-	 pfib ffib area qsort \
+	 pfib ffib qsort \
 	 book9-4 catch222 \
 	 \
 	 fail_param1 fail_param2 fail_param3 fail_param4 \
 	 fail_func1 fail_func2
 
+# In addition, these should pass when using native backend
+TESTS_NATIVE ?= \
+	record1 record2 record3 record4 \
+	deref3 \
+	area
 
 all: parse.js units/kbd.js
 
@@ -66,7 +69,6 @@ units/kbd.js: units/kbd.ll
 units/kbd.ll: units/kbd.c
 	clang -emit-llvm $< -S -o $@
 
-
 TEST_DEPS = ir.js parse.js units/system.js units/crt.js units/kbd.js
 
 GOOD_TESTS=$(filter-out fail_%,$(TESTS))
@@ -82,6 +84,7 @@ JS_OBJECTS=$(GOOD_TESTS:%=$(BUILDDIR)/%.js)
 DIFFS=$(GOOD_TESTS:%=$(BUILDDIR)/%.diff)
 FAIL_MARKS=$(FAIL_TESTS:%=$(BUILDDIR)/%.fail-msg)
 
+js_objects: $(JS_OBJECTS)
 
 $(FPC_OBJECTS): $(BUILDDIR)/%.1: $(TESTDIR)/%.pas $(TEST_DEPS)
 	@if [ -e $<.out ]; then \
@@ -160,4 +163,5 @@ test: test_prefix $(DIFFS) $(FAIL_MARKS)
 	echo "RESULT: `echo $$pass | wc -w`/`echo $(TESTS) | wc -w` tests passed"; \
 	[ -n "$${fail}" ] && echo "Failing tests: $${fail}"; \
 	true
-
+	
+.PHONY: all clean js_objects
