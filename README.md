@@ -140,3 +140,7 @@ Some other differences from Turbo Pascal 1.0:
 * Mem and Port built-in arrays
 * Variant Records
 
+## License
+
+This project is licensed under the MPL-2.0 License. See the LICENSE.txt file for more information.
+
